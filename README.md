@@ -29,9 +29,34 @@ installer type. Your project's `composer.json` needs a matching
 }
 ```
 
-### Before this repo has a remote (local development)
+### From the private Bitbucket repo (recommended)
 
-Point a `path` repository at your local clone:
+This repo lives at `bitbucket.org/codeballers/content-mcp-bridge`, tagged
+starting at `v0.1.0`. Point a `vcs` repository at the SSH URL and require it
+like any other package:
+
+```json
+"repositories": [
+    { "type": "vcs", "url": "git@bitbucket.org:codeballers/content-mcp-bridge.git" }
+],
+"require": {
+    "devballers/content-mcp-bridge": "^0.1"
+}
+```
+
+Run `composer update devballers/content-mcp-bridge`.
+
+This requires the machine running Composer (your dev machine, and any CI
+agent) to have SSH read access to the repo — either your own key (if you
+have access to the `codeballers` workspace) or a dedicated deploy key added
+to the repo under **Repository settings → Access keys**. There's nothing to
+configure on the Composer side beyond the `vcs` URL above; it shells out to
+`git` and uses whatever SSH key is already available.
+
+### Local development against an uncommitted clone
+
+If you're editing the plugin itself alongside a consuming project, a `path`
+repository is faster than round-tripping through git:
 
 ```json
 "repositories": [
@@ -41,26 +66,6 @@ Point a `path` repository at your local clone:
     "devballers/content-mcp-bridge": "@dev"
 }
 ```
-
-### Once pushed and tagged on Bitbucket
-
-Point a `vcs` repository at the git URL instead, and pin a version:
-
-```json
-"repositories": [
-    { "type": "vcs", "url": "git@bitbucket.org:yourorg/content-mcp-bridge.git" }
-],
-"require": {
-    "devballers/content-mcp-bridge": "^1.0"
-}
-```
-
-Run `composer update devballers/content-mcp-bridge`.
-
-If your CI needs to clone this from a **private** Bitbucket repo, it needs
-read access — either an SSH deploy key on the build agent, or an app-password
-entry in `auth.json` (the same mechanism used for other private packages in
-this ecosystem, e.g. `composer config http-basic.bitbucket.org <user> <app-password>`).
 
 ## Setup after activation
 
