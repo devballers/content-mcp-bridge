@@ -4,7 +4,9 @@
     "type": "wordpress-plugin",
     "license": "GPL-2.0-or-later",
     "require": {
-        "php": ">=8.0",
-        "wordpress/mcp-adapter": "^0.5.0"
+        "php": ">=8.0"
+    },
+    "suggest": {
+        "wordpress/mcp-adapter": "Required at runtime. Add it directly to your project's own composer.json require — this plugin only checks for it at runtime and shows an admin notice if it's missing."
     }
 }
