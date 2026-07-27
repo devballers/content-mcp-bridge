@@ -91,13 +91,16 @@ class Settings {
         $userId = (int)(    $input['ai_user_id'] ?? 0    );
         $user   = $userId ? get_user_by('id', $userId) : false;
 
-        if ($userId && (!$user || $user->has_cap('manage_options'))) {
+        if ($userId && (!$user || $user->has_cap('manage_options') || !$user->has_cap(Role::SLUG))) {
             $userId = 0;
 
             add_settings_error(
                 self::OPTION_KEY,
-                'ai_user_is_admin',
-                'The AI content user cannot be an account with administrator capabilities. Use a dedicated, low-privilege account instead.'
+                'ai_user_invalid',
+                sprintf(
+                    'The AI content user must have the "%s" role and no administrator capabilities. Assign that role to a dedicated account under Users, then select it here.',
+                    Role::LABEL
+                )
             );
         }
 
@@ -136,16 +139,25 @@ class Settings {
                     <tr>
                         <th scope="row"><label for="cmb-ai-user">AI content user</label></th>
                         <td>
-                            <?php
-                            wp_dropdown_users([
-                                'name'               => self::OPTION_KEY.'[ai_user_id]',
-                                'id'                 => 'cmb-ai-user',
-                                'selected'           => $settings['ai_user_id'],
-                                'show_option_none'   => 'Select a user…',
-                                'capability__not_in' => ['manage_options'],
-                            ]);
-                            ?>
-                            <p class="description">Every MCP request is executed as this WordPress user. Accounts with administrator capabilities are not offered here — use a dedicated, low-privilege account, since a leaked server URL grants whatever this user can do.</p>
+                            <?php if (get_users(['role' => Role::SLUG, 'number' => 1, 'fields' => 'ID'])) { ?>
+                                <?php
+                                wp_dropdown_users([
+                                    'name'               => self::OPTION_KEY.'[ai_user_id]',
+                                    'id'                 => 'cmb-ai-user',
+                                    'selected'           => $settings['ai_user_id'],
+                                    'show_option_none'   => 'Select a user…',
+                                    'role'               => Role::SLUG,
+                                    'capability__not_in' => ['manage_options'],
+                                ]);
+                                ?>
+                            <?php } else { ?>
+                                <p>
+                                    No user has the <strong><?= esc_html(Role::LABEL); ?></strong> role yet.
+                                    Go to <a href="<?= esc_url(admin_url('user-new.php')); ?>">Users → Add New</a>
+                                    (or edit an existing account) and assign that role, then come back here to select it.
+                                </p>
+                            <?php } ?>
+                            <p class="description">Every MCP request is executed as this WordPress user. Only accounts with the dedicated "<?= esc_html(Role::LABEL); ?>" role are offered here — a leaked server URL grants whatever this user can do, so it must never be an administrator.</p>
                         </td>
                     </tr>
                     <tr>

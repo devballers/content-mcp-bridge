@@ -114,12 +114,25 @@ repository is faster than round-tripping through git:
 
 ## Setup after activation
 
-1. Activate **MCP Adapter**, then **Content MCP Bridge**, in wp-admin → Plugins.
-2. Set `CONTENT_MCP_BRIDGE_KEY` in your environment — a random string, 32+
-   characters (e.g. `openssl rand -hex 32`). This becomes part of the MCP
-   server's secret URL; without it, no server is registered.
-3. Visit **Settings → Content MCP Bridge** and configure:
-   - The AI content user (a dedicated, low-privilege WordPress account).
-   - Which post types can be listed/read/edited over MCP.
-   - Read-only mode, if you only want the AI to read content for now.
-   - Which detected integrations (WPML, Rank Math, ACF) to expose.
+1. Activate **MCP Adapter**, then **Content MCP Bridge**, in wp-admin → Plugins
+   (also add `"wordpress/mcp-adapter"` to your project's own Composer
+   `require` — see Requirements above).
+2. Go to **Users → Add New** (or edit an existing account) and assign it the
+   **AI Content Editor** role that this plugin creates. This is the account
+   every MCP request runs as — never assign it Administrator.
+3. Visit **Settings → Content MCP Bridge**:
+   - Click **Generate a new key** and copy the value into the
+     `CONTENT_MCP_BRIDGE_KEY` environment variable (your host's environment
+     settings, or a local `.env` file), then reload the page.
+   - Pick the AI content user you created in step 2 from the dropdown (only
+     accounts with the AI Content Editor role are listed).
+   - Choose which post types can be listed/read/edited over MCP, whether
+     read-only mode should disable all write abilities, and which detected
+     integrations (WPML, Rank Math, ACF) to expose.
+   - Once a key and user are both set, the page shows the live **Server
+     URL** — paste that into Claude's "Remote MCP server URL" field.
+
+The AI Content Editor role's actual WordPress capabilities are computed
+automatically from whichever post types/integrations you enable above — it
+only ever has exactly what's needed for the currently-enabled settings, and
+is kept in sync whenever you change them.
