@@ -2,6 +2,7 @@
 namespace ContentMcpBridge;
 
 use ContentMcpBridge\Abilities\AbilityGroup;
+use ContentMcpBridge\Abilities\Diagnostics;
 use ContentMcpBridge\Abilities\Media;
 use ContentMcpBridge\Abilities\Menus;
 use ContentMcpBridge\Abilities\PostFields;
@@ -30,6 +31,7 @@ class AbilityRegistrar {
 
         $this->register(new Posts(), $readOnly);
         $this->register(new Media(), $readOnly);
+        $this->register(new Diagnostics(), $readOnly);
 
         if (!empty($enabled['acf_fields'])) {
             $this->register(new PostFields(), $readOnly);
