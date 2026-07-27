@@ -199,20 +199,6 @@ class Settings {
                         </td>
                     </tr>
                     <tr>
-                        <th scope="row">Read-Only Mode</th>
-                        <td>
-                            <label>
-                                <input
-                                    type="checkbox"
-                                    name="<?= esc_attr(self::OPTION_KEY); ?>[read_only]"
-                                    value="1"
-                                    <?php checked($settings['read_only']); ?>
-                                >
-                                Disable every ability that creates, updates or deletes content
-                            </label>
-                        </td>
-                    </tr>
-                    <tr>
                         <th scope="row">Integrations</th>
                         <td>
                             <?php foreach (self::INTEGRATIONS as $key => $label) {
@@ -232,6 +218,20 @@ class Settings {
                                     <?php } ?>
                                 </label>
                             <?php } ?>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Read-Only Mode</th>
+                        <td>
+                            <label>
+                                <input
+                                    type="checkbox"
+                                    name="<?= esc_attr(self::OPTION_KEY); ?>[read_only]"
+                                    value="1"
+                                    <?php checked($settings['read_only']); ?>
+                                >
+                                Disable every ability that creates, updates or deletes content
+                            </label>
                         </td>
                     </tr>
                 </table>
