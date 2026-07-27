@@ -23,8 +23,7 @@ class Settings {
      *     ai_user_id: int,
      *     enabled_post_types: string[],
      *     read_only: bool,
-     *     integrations: array<string, bool>,
-     *     extra_capabilities: string[]
+     *     integrations: array<string, bool>
      * }
      */
     public static function get(): array {
@@ -33,7 +32,6 @@ class Settings {
             'enabled_post_types' => [],
             'read_only'          => false,
             'integrations'       => array_fill_keys(array_keys(self::INTEGRATIONS), false),
-            'extra_capabilities' => [],
         ];
 
         $stored = get_option(self::OPTION_KEY, []);
@@ -134,24 +132,11 @@ class Settings {
             $integrations[$key]    = $requested && self::isIntegrationDetected($key);
         }
 
-        $rawCapabilities   = preg_split('/[\s,]+/', (string)(    $input['extra_capabilities'] ?? ''    ), -1, PREG_SPLIT_NO_EMPTY);
-        $rawCapabilities   = array_values(array_unique(array_map('sanitize_key', $rawCapabilities)));
-        $extraCapabilities = array_values(array_diff($rawCapabilities, ['manage_options']));
-
-        if (count($extraCapabilities) !== count($rawCapabilities)) {
-            add_settings_error(
-                self::OPTION_KEY,
-                'extra_capability_blocked',
-                '"manage_options" cannot be granted here — it would make the AI content user administrator-capable, which this plugin refuses to allow regardless of setting.'
-            );
-        }
-
         return [
             'ai_user_id'         => $userId,
             'enabled_post_types' => array_values(array_intersect($postedTypes, $validTypes)),
             'read_only'          => !empty($input['read_only']),
             'integrations'       => $integrations,
-            'extra_capabilities' => $extraCapabilities,
         ];
     }
 
@@ -233,28 +218,6 @@ class Settings {
                                     <?php } ?>
                                 </label>
                             <?php } ?>
-                        </td>
-                    </tr>
-                    <tr>
-                        <th scope="row"><label for="cmb-extra-caps">Additional Capabilities</label></th>
-                        <td>
-                            <textarea
-                                id="cmb-extra-caps"
-                                name="<?= esc_attr(self::OPTION_KEY); ?>[extra_capabilities]"
-                                class="large-text code"
-                                rows="3"
-                            ><?= esc_textarea(implode("\n", $settings['extra_capabilities'])); ?></textarea>
-                            <p class="description">
-                                Extra WordPress capability names to grant the AI Content Editor role, one
-                                per line — for abilities registered by <em>other</em> plugins (e.g. a
-                                Rank Math role-manager capability like <code>rank_math_analytics</code>)
-                                that this plugin doesn't itself require. Use
-                                <code>content-mcp-bridge/whoami</code> to check which capabilities the AI
-                                user currently has before and after adding one here.
-                                <strong><code>manage_options</code> is never allowed</strong>, even if
-                                listed — granting it would make this account administrator-capable, which
-                                defeats the point of a dedicated low-privilege user.
-                            </p>
                         </td>
                     </tr>
                     <tr>

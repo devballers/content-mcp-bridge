@@ -75,12 +75,7 @@ class Role {
             $caps[] = 'rank_math_onpage_general';
         }
 
-        // Site-owner-specified capabilities for abilities registered by
-        // other plugins (manage_options is filtered out at save time in
-        // Settings::sanitize(), never trust it even if it somehow got in).
-        $caps = array_merge($caps, $settings['extra_capabilities']);
-
-        return array_values(array_diff(array_unique(array_filter($caps)), ['manage_options']));
+        return array_values(array_unique(array_filter($caps)));
     }
 
     /**
