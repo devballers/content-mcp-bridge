@@ -13,6 +13,49 @@ enable.
   This plugin declares it as a Composer dependency, so requiring this plugin pulls it in
   automatically — but it still needs to be **activated separately** in wp-admin.
 
+## Prerequisites for developers (once per machine)
+
+Composer installs this package over SSH, using your own personal Bitbucket
+access — there's no shared token or deploy key to distribute. Before your
+first install of *any* project that depends on this repo:
+
+1. Make sure you have an SSH key added to your own Bitbucket account
+   (**Personal settings → SSH keys**), and that your account has been given
+   access to the `codeballers` workspace.
+2. Establish SSH trust with Bitbucket once:
+   ```
+   ssh -T git@bitbucket.org
+   ```
+   - If this is the **first time** your machine has talked to `bitbucket.org`
+     over SSH, you'll see `The authenticity of host 'bitbucket.org' can't be
+     established... Are you sure you want to continue connecting (yes/no)?`
+     — this is normal and expected for any new SSH host. Check the fingerprint
+     against Bitbucket's published SSH host key fingerprints (see Atlassian's
+     Bitbucket Cloud documentation), then type `yes`.
+   - If instead you see `WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!` /
+     `Host key verification failed`, your machine has a **stale** cached key
+     from before Bitbucket last rotated its SSH host keys. Fix it with:
+     ```
+     ssh-keygen -R bitbucket.org
+     ssh -T git@bitbucket.org
+     ```
+     then verify the new fingerprint shown against Bitbucket's published one
+     before accepting, since this warning is also what a real
+     man-in-the-middle attempt would look like.
+
+This is a **one-time, per-machine** step — it's not specific to this plugin
+or to any single project. Once `bitbucket.org` is trusted, every future
+`composer install`/`update` that touches this repo (on any project) works
+silently, with no prompts. If you skip this and jump straight to
+`composer require`, Composer's underlying `git` call will fail the same way
+and Composer will confusingly fall back to asking for Bitbucket OAuth
+credentials — that prompt is a symptom of the SSH step above not having
+happened yet, not something to actually go through.
+
+CI/build agents are a separate case: they should use their own dedicated SSH
+deploy key (added under the repo's **Repository settings → Access keys**)
+rather than any individual developer's personal key.
+
 ## Installing via Composer
 
 This repo doesn't merge into your project's own `vendor/autoload.php` — like
@@ -32,12 +75,14 @@ installer type. Your project's `composer.json` needs a matching
 ### From the private Bitbucket repo (recommended)
 
 This repo lives at `bitbucket.org/codeballers/content-mcp-bridge`, tagged
-starting at `v0.1.0`. Point a `vcs` repository at the SSH URL and require it
-like any other package:
+starting at `v0.1.0`. Point a `git` repository (not `vcs` — an explicit
+`git` type skips Bitbucket's API-based driver entirely and sticks to plain
+`git`/SSH, which avoids Composer ever prompting for Bitbucket OAuth
+credentials) at the SSH URL and require it like any other package:
 
 ```json
 "repositories": [
-    { "type": "vcs", "url": "git@bitbucket.org:codeballers/content-mcp-bridge.git" }
+    { "type": "git", "url": "git@bitbucket.org:codeballers/content-mcp-bridge.git" }
 ],
 "require": {
     "devballers/content-mcp-bridge": "^0.1"
