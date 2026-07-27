@@ -224,8 +224,7 @@ class Settings {
     }
 
     private function renderMcpServerSection(): void {
-        $key = $_ENV['CONTENT_MCP_BRIDGE_KEY'] ?? '';
-        $url = Server::urlForKey($key);
+        $url = Server::urlForKey(Server::currentKey());
         ?>
         <h2>MCP server</h2>
         <table class="form-table" role="presentation">

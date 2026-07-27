@@ -25,6 +25,24 @@ class Server {
     }
 
     /**
+     * Reads CONTENT_MCP_BRIDGE_KEY from whichever mechanism a project uses
+     * to populate its environment — the $_ENV superglobal (e.g. via
+     * vlucas/phpdotenv) or a plain putenv()/host-panel env var, which only
+     * shows up via getenv() and never touches $_ENV.
+     */
+    public static function currentKey(): string {
+        $fromEnv = $_ENV['CONTENT_MCP_BRIDGE_KEY'] ?? '';
+
+        if ($fromEnv !== '') {
+            return (string)$fromEnv;
+        }
+
+        $fromGetenv = getenv('CONTENT_MCP_BRIDGE_KEY');
+
+        return $fromGetenv !== false ? $fromGetenv : '';
+    }
+
+    /**
      * Builds the public MCP server URL for a given secret key, or null if
      * the key or the configured AI user aren't valid yet. Used both to
      * register the server and to display its URL on the settings page.
@@ -48,7 +66,7 @@ class Server {
     }
 
     public function registerServer(McpAdapter $adapter): void {
-        $key = $_ENV['CONTENT_MCP_BRIDGE_KEY'] ?? '';
+        $key = self::currentKey();
 
         if (!self::urlForKey($key) || !class_exists(HttpTransport::class)) {
             return;

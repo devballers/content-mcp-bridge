@@ -121,9 +121,20 @@ repository is faster than round-tripping through git:
    **AI Content Editor** role that this plugin creates. This is the account
    every MCP request runs as — never assign it Administrator.
 3. Visit **Settings → Content MCP Bridge**:
-   - Click **Generate a new key** and copy the value into the
-     `CONTENT_MCP_BRIDGE_KEY` environment variable (your host's environment
-     settings, or a local `.env` file), then reload the page.
+   - Click **Generate a new key** and set the value as `CONTENT_MCP_BRIDGE_KEY`,
+     then reload the page. Where that goes depends on how your project loads
+     its environment:
+     - **Projects with a `.env` file** (e.g. via `vlucas/phpdotenv`): add
+       `CONTENT_MCP_BRIDGE_KEY=<value>` there — this populates `$_ENV`, which
+       the plugin reads directly.
+     - **Projects without one, configuring things in `wp-config.php`**: set
+       the superglobal explicitly — `$_ENV['CONTENT_MCP_BRIDGE_KEY'] =
+       '<value>';` — before `wp-settings.php` is loaded. A plain
+       `define('CONTENT_MCP_BRIDGE_KEY', ...)` won't work (the plugin doesn't
+       read constants), and `putenv(...)` alone won't either (it populates
+       `getenv()`, not `$_ENV` — though the plugin does also check `getenv()`
+       as a fallback, so a host panel that sets a real process env var works
+       too).
    - Pick the AI content user you created in step 2 from the dropdown (only
      accounts with the AI Content Editor role are listed).
    - Choose which post types can be listed/read/edited over MCP, whether
