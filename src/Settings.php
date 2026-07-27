@@ -50,6 +50,28 @@ class Settings {
         return in_array($postType, self::get()['enabled_post_types'], true);
     }
 
+    /**
+     * Post type slugs a site owner can actually choose to expose over MCP —
+     * excludes attachments (media has its own ability group) and ACF/ACF
+     * Extended's own internal storage post types (field groups, dynamic
+     * post types/taxonomies/options pages, forms, templates), which hold
+     * the site's data-model configuration rather than content and would
+     * let an AI restructure the site rather than just edit it.
+     *
+     * @return string[]
+     */
+    public static function manageablePostTypes(): array {
+        $types = get_post_types(['show_ui' => true], 'names');
+
+        return array_values(array_filter($types, static function (string $type): bool {
+            if ($type === 'attachment') {
+                return false;
+            }
+
+            return !str_starts_with($type, 'acf-') && !str_starts_with($type, 'acfe-');
+        }));
+    }
+
     public static function isIntegrationDetected(string $integration): bool {
         return match ($integration) {
             'wpml'              => has_filter('wpml_object_id') !== false,
@@ -84,8 +106,7 @@ class Settings {
      */
     public function sanitize($input): array {
         $input       = is_array($input) ? $input : [];
-        $validTypes  = array_keys(get_post_types(['show_ui' => true], 'names'));
-        $validTypes  = array_diff($validTypes, ['attachment']);
+        $validTypes  = self::manageablePostTypes();
         $postedTypes = array_map('sanitize_key', (array)(    $input['enabled_post_types'] ?? []    ));
 
         $userId = (int)(    $input['ai_user_id'] ?? 0    );
@@ -125,8 +146,7 @@ class Settings {
         }
 
         $settings  = self::get();
-        $postTypes = get_post_types(['show_ui' => true], 'objects');
-        unset($postTypes['attachment']);
+        $postTypes = array_filter(array_map('get_post_type_object', self::manageablePostTypes()));
         ?>
         <div class="wrap">
             <h1>Content MCP Bridge</h1>
@@ -137,7 +157,7 @@ class Settings {
                 <?php settings_fields('content_mcp_bridge'); ?>
                 <table class="form-table" role="presentation">
                     <tr>
-                        <th scope="row"><label for="cmb-ai-user">AI content user</label></th>
+                        <th scope="row"><label for="cmb-ai-user">AI Content User</label></th>
                         <td>
                             <?php if (get_users(['role' => Role::SLUG, 'number' => 1, 'fields' => 'ID'])) { ?>
                                 <?php
@@ -145,7 +165,7 @@ class Settings {
                                     'name'               => self::OPTION_KEY.'[ai_user_id]',
                                     'id'                 => 'cmb-ai-user',
                                     'selected'           => $settings['ai_user_id'],
-                                    'show_option_none'   => 'Select a user…',
+                                    'show_option_none'   => 'Select a User…',
                                     'role'               => Role::SLUG,
                                     'capability__not_in' => ['manage_options'],
                                 ]);
@@ -161,7 +181,7 @@ class Settings {
                         </td>
                     </tr>
                     <tr>
-                        <th scope="row">Allowed post types</th>
+                        <th scope="row">Allowed Post Types</th>
                         <td>
                             <?php foreach ($postTypes as $postType) { ?>
                                 <label style="display:block;">
@@ -179,7 +199,7 @@ class Settings {
                         </td>
                     </tr>
                     <tr>
-                        <th scope="row">Read-only mode</th>
+                        <th scope="row">Read-Only Mode</th>
                         <td>
                             <label>
                                 <input
@@ -226,15 +246,15 @@ class Settings {
     private function renderMcpServerSection(): void {
         $url = Server::urlForKey(Server::currentKey());
         ?>
-        <h2>MCP server</h2>
+        <h2>MCP Server</h2>
         <table class="form-table" role="presentation">
             <tr>
-                <th scope="row">Secret key</th>
+                <th scope="row">Secret Key</th>
                 <td>
                     <input type="text" id="cmb-generated-key" class="regular-text" readonly
                         onclick="this.select();"
                         placeholder="Click Generate, then copy into CONTENT_MCP_BRIDGE_KEY in your environment">
-                    <button type="button" class="button" id="cmb-generate-key">Generate a new key</button>
+                    <button type="button" class="button" id="cmb-generate-key">Generate a New Key</button>
                     <p class="description">
                         Generated locally in your browser — never sent to or stored by this site.
                         Copy it into the <code>CONTENT_MCP_BRIDGE_KEY</code> environment variable
@@ -287,7 +307,7 @@ class Settings {
             return;
         }
         ?>
-        <h2>Recent MCP activity</h2>
+        <h2>Recent MCP Activity</h2>
         <table class="widefat striped">
             <thead>
                 <tr>
