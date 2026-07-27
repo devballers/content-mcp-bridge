@@ -75,7 +75,44 @@ class Role {
             $caps[] = 'rank_math_onpage_general';
         }
 
+        $caps = array_merge($caps, self::thirdPartyCapabilities());
+
         return array_values(array_unique(array_filter($caps)));
+    }
+
+    /**
+     * Capabilities needed to reach other plugins' own MCP abilities (a
+     * separate "rank-math"/"wp-rocket"/"imagify" ability namespace, not
+     * anything content-mcp-bridge registers itself). Each block is gated
+     * on that specific plugin actually being active, so nothing phantom
+     * gets granted for a plugin a given project doesn't use. These are
+     * narrow, plugin-scoped capabilities — unlike manage_options, which
+     * stays a deliberate, explicit, per-project decision (see Settings.php)
+     * rather than something this method grants automatically.
+     *
+     * @return string[]
+     */
+    private static function thirdPartyCapabilities(): array {
+        $caps = [];
+
+        if (class_exists('RankMath')) {
+            $caps = array_merge($caps, [
+                'rank_math_site_analysis',
+                'rank_math_link_builder',
+                'rank_math_analytics',
+                'rank_math_onpage_analysis',
+            ]);
+        }
+
+        if (defined('WP_ROCKET_VERSION')) {
+            $caps[] = 'rocket_manage_options';
+        }
+
+        if (defined('IMAGIFY_VERSION')) {
+            $caps[] = 'imagify_optimize_files';
+        }
+
+        return $caps;
     }
 
     /**
