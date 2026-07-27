@@ -18,27 +18,48 @@ use WP\MCP\Transport\HttpTransport;
  * either is missing.
  */
 class Server {
+    private const ROUTE_NAMESPACE = 'mcp';
+
     public function __construct() {
         add_action('mcp_adapter_init', [$this, 'registerServer']);
     }
 
-    public function registerServer(McpAdapter $adapter): void {
-        $key = $_ENV['CONTENT_MCP_BRIDGE_KEY'] ?? '';
-
-        if (!preg_match('/^[A-Za-z0-9-]{32,}$/', $key) || !class_exists(HttpTransport::class)) {
-            return;
+    /**
+     * Builds the public MCP server URL for a given secret key, or null if
+     * the key or the configured AI user aren't valid yet. Used both to
+     * register the server and to display its URL on the settings page.
+     */
+    public static function urlForKey(string $key): ?string {
+        if (!preg_match(Settings::KEY_PATTERN, $key)) {
+            return null;
         }
 
         $userId = Settings::get()['ai_user_id'];
 
         if (!$userId || !get_user_by('id', $userId)) {
+            return null;
+        }
+
+        return home_url('/wp-json/'.self::ROUTE_NAMESPACE.'/'.self::routeSlug($key));
+    }
+
+    private static function routeSlug(string $key): string {
+        return 'bridge-'.$key;
+    }
+
+    public function registerServer(McpAdapter $adapter): void {
+        $key = $_ENV['CONTENT_MCP_BRIDGE_KEY'] ?? '';
+
+        if (!self::urlForKey($key) || !class_exists(HttpTransport::class)) {
             return;
         }
 
+        $userId = Settings::get()['ai_user_id'];
+
         $adapter->create_server(
             'content-mcp-bridge',
-            'mcp',
-            'bridge-'.$key,
+            self::ROUTE_NAMESPACE,
+            self::routeSlug($key),
             'Content MCP Bridge',
             'Content-editing abilities exposed to an MCP client.',
             'v1.0.0',

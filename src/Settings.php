@@ -4,6 +4,8 @@ namespace ContentMcpBridge;
 class Settings {
     public const OPTION_KEY = 'content_mcp_bridge_settings';
 
+    public const KEY_PATTERN = '/^[A-Za-z0-9-]{32,}$/';
+
     public const INTEGRATIONS = [
         'wpml'              => 'WPML (translations & menu translation)',
         'rank_math'         => 'Rank Math SEO',
@@ -87,9 +89,16 @@ class Settings {
         $postedTypes = array_map('sanitize_key', (array)(    $input['enabled_post_types'] ?? []    ));
 
         $userId = (int)(    $input['ai_user_id'] ?? 0    );
+        $user   = $userId ? get_user_by('id', $userId) : false;
 
-        if ($userId && !get_user_by('id', $userId)) {
+        if ($userId && (!$user || $user->has_cap('manage_options'))) {
             $userId = 0;
+
+            add_settings_error(
+                self::OPTION_KEY,
+                'ai_user_is_admin',
+                'The AI content user cannot be an account with administrator capabilities. Use a dedicated, low-privilege account instead.'
+            );
         }
 
         $integrations = [];
@@ -118,6 +127,9 @@ class Settings {
         ?>
         <div class="wrap">
             <h1>Content MCP Bridge</h1>
+
+            <?php $this->renderMcpServerSection(); ?>
+
             <form method="post" action="options.php">
                 <?php settings_fields('content_mcp_bridge'); ?>
                 <table class="form-table" role="presentation">
@@ -126,13 +138,14 @@ class Settings {
                         <td>
                             <?php
                             wp_dropdown_users([
-                                'name'             => self::OPTION_KEY.'[ai_user_id]',
-                                'id'               => 'cmb-ai-user',
-                                'selected'         => $settings['ai_user_id'],
-                                'show_option_none' => 'Select a user…',
+                                'name'               => self::OPTION_KEY.'[ai_user_id]',
+                                'id'                 => 'cmb-ai-user',
+                                'selected'           => $settings['ai_user_id'],
+                                'show_option_none'   => 'Select a user…',
+                                'capability__not_in' => ['manage_options'],
                             ]);
                             ?>
-                            <p class="description">Every MCP request is executed as this WordPress user. Use a dedicated, low-privilege account.</p>
+                            <p class="description">Every MCP request is executed as this WordPress user. Accounts with administrator capabilities are not offered here — use a dedicated, low-privilege account, since a leaked server URL grants whatever this user can do.</p>
                         </td>
                     </tr>
                     <tr>
@@ -195,6 +208,64 @@ class Settings {
 
             <?php $this->renderAuditLog(); ?>
         </div>
+        <?php
+    }
+
+    private function renderMcpServerSection(): void {
+        $key = $_ENV['CONTENT_MCP_BRIDGE_KEY'] ?? '';
+        $url = Server::urlForKey($key);
+        ?>
+        <h2>MCP server</h2>
+        <table class="form-table" role="presentation">
+            <tr>
+                <th scope="row">Secret key</th>
+                <td>
+                    <input type="text" id="cmb-generated-key" class="regular-text" readonly
+                        onclick="this.select();"
+                        placeholder="Click Generate, then copy into CONTENT_MCP_BRIDGE_KEY in your environment">
+                    <button type="button" class="button" id="cmb-generate-key">Generate a new key</button>
+                    <p class="description">
+                        Generated locally in your browser — never sent to or stored by this site.
+                        Copy it into the <code>CONTENT_MCP_BRIDGE_KEY</code> environment variable
+                        (your host's environment settings, or a local <code>.env</code> file), then
+                        reload this page. Changing it immediately invalidates the server URL below
+                        for everyone currently using it.
+                    </p>
+                </td>
+            </tr>
+            <tr>
+                <th scope="row">Server URL</th>
+                <td>
+                    <?php if ($url) { ?>
+                        <input type="text" class="regular-text" style="width:100%;max-width:640px;" readonly
+                            onclick="this.select();" value="<?= esc_attr($url); ?>">
+                        <p class="description">
+                            Paste this into Claude's "Remote MCP server URL" field. Treat it like a
+                            password — anyone with this URL can act as the AI content user configured
+                            below.
+                        </p>
+                    <?php } else { ?>
+                        <p class="description">
+                            Not active yet: set <code>CONTENT_MCP_BRIDGE_KEY</code> in your environment
+                            (32+ characters — use the generator above) and choose an AI content user
+                            below to activate the server and see its URL here.
+                        </p>
+                    <?php } ?>
+                </td>
+            </tr>
+        </table>
+        <script>
+        document.getElementById('cmb-generate-key').addEventListener('click', function () {
+            var bytes = new Uint8Array(32);
+            window.crypto.getRandomValues(bytes);
+            var hex = Array.from(bytes, function (b) {
+                return b.toString(16).padStart(2, '0');
+            }).join('');
+            var field = document.getElementById('cmb-generated-key');
+            field.value = hex;
+            field.select();
+        });
+        </script>
         <?php
     }
 
