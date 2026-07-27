@@ -60,15 +60,14 @@ class Translations implements AbilityGroup {
                 ],
             ],
             'execute_callback'    => AuditLog::wrap('content-mcp-bridge/get-post-translations', [$this, 'getPostTranslations']),
-            'permission_callback' => function (array $input): bool {
-                $postId = (int)(    $input['post_id'] ?? 0    );
-
-                return current_user_can('edit_posts') && Settings::isPostTypeAllowed((string)get_post_type($postId));
+            'permission_callback' => function (): bool {
+                return current_user_can('edit_posts');
             },
             'meta'                => [
                 'annotations' => [
-                    'readonly'   => true,
-                    'idempotent' => true,
+                    'readonly'    => true,
+                    'destructive' => false,
+                    'idempotent'  => true,
                 ],
                 'mcp'         => [
                     'public' => true,
@@ -139,10 +138,8 @@ class Translations implements AbilityGroup {
                 ],
             ],
             'execute_callback'    => AuditLog::wrap('content-mcp-bridge/create-post-translation', [$this, 'createPostTranslation']),
-            'permission_callback' => function (array $input): bool {
-                $sourceId = (int)(    $input['source_post_id'] ?? 0    );
-
-                return current_user_can('edit_post', $sourceId) && Settings::isPostTypeAllowed((string)get_post_type($sourceId));
+            'permission_callback' => function (): bool {
+                return current_user_can('edit_posts');
             },
             'meta'                => [
                 'annotations' => [
@@ -163,13 +160,13 @@ class Translations implements AbilityGroup {
             return new WP_Error('wpml_not_active', 'WPML is not active on this site.');
         }
 
-        $postId = isset($input['post_id']) ? (int)$input['post_id'] : 0;
-        $post   = get_post($postId);
+        $post = PostGuard::resolve(isset($input['post_id']) ? (int)$input['post_id'] : 0, 'edit_post');
 
-        if (!$post) {
-            return new WP_Error('post_not_found', "Post {$postId} was not found.");
+        if (is_wp_error($post)) {
+            return $post;
         }
 
+        $postId       = $post->ID; // phpcs:ignore Zend.NamingConventions.ValidVariableName
         $postType     = $post->post_type; // phpcs:ignore Zend.NamingConventions.ValidVariableName
         $translations = [];
 
@@ -285,6 +282,17 @@ class Translations implements AbilityGroup {
 
         if (!$source) {
             return new WP_Error('post_not_found', "Post {$sourceId} was not found.");
+        }
+
+        if (!current_user_can('edit_post', $sourceId)) {
+            return new WP_Error('permission_denied', 'You do not have permission to translate this post.');
+        }
+
+        if (!Settings::isPostTypeAllowed($source->post_type)) { // phpcs:ignore Zend.NamingConventions.ValidVariableName
+            return new WP_Error(
+                'permission_denied',
+                "The '{$source->post_type}' post type is not enabled for MCP access." // phpcs:ignore Zend.NamingConventions.ValidVariableName
+            );
         }
 
         if (!array_key_exists($language, Wpml::getAllActiveLanguages())) {

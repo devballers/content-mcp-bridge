@@ -2,7 +2,6 @@
 namespace ContentMcpBridge\Abilities;
 
 use ContentMcpBridge\AuditLog;
-use ContentMcpBridge\Settings;
 use WP_Error;
 
 /**
@@ -46,15 +45,14 @@ class PostFields implements AbilityGroup {
                 ],
             ],
             'execute_callback'    => AuditLog::wrap('content-mcp-bridge/get-post-fields', [$this, 'getPostFields']),
-            'permission_callback' => function (array $input): bool {
-                $postId = (int)(    $input['post_id'] ?? 0    );
-
-                return current_user_can('edit_post', $postId) && Settings::isPostTypeAllowed((string)get_post_type($postId));
+            'permission_callback' => function (): bool {
+                return current_user_can('edit_posts');
             },
             'meta'                => [
                 'annotations' => [
-                    'readonly'   => true,
-                    'idempotent' => true,
+                    'readonly'    => true,
+                    'destructive' => false,
+                    'idempotent'  => true,
                 ],
                 'mcp'         => [
                     'public' => true,
@@ -98,10 +96,8 @@ class PostFields implements AbilityGroup {
                 ],
             ],
             'execute_callback'    => AuditLog::wrap('content-mcp-bridge/update-post-field', [$this, 'updatePostField']),
-            'permission_callback' => function (array $input): bool {
-                $postId = (int)(    $input['post_id'] ?? 0    );
-
-                return current_user_can('edit_post', $postId) && Settings::isPostTypeAllowed((string)get_post_type($postId));
+            'permission_callback' => function (): bool {
+                return current_user_can('edit_posts');
             },
             'meta'                => [
                 'annotations' => [
@@ -126,16 +122,16 @@ class PostFields implements AbilityGroup {
             return new WP_Error('acf_missing', 'ACF is not active.');
         }
 
-        $postId = (int)(    $input['post_id'] ?? 0    );
+        $post = PostGuard::resolve((int)(    $input['post_id'] ?? 0    ));
 
-        if (!get_post($postId)) {
-            return new WP_Error('post_not_found', "Post {$postId} was not found.");
+        if (is_wp_error($post)) {
+            return $post;
         }
 
-        $fields = get_fields($postId);
+        $fields = get_fields($post->ID);
 
         return [
-            'id'     => $postId,
+            'id'     => $post->ID,
             'fields' => (object)(    is_array($fields) ? $fields : []    ),
         ];
     }
@@ -149,13 +145,14 @@ class PostFields implements AbilityGroup {
             return new WP_Error('acf_missing', 'ACF is not active.');
         }
 
-        $postId = (int)(    $input['post_id'] ?? 0    );
+        $post = PostGuard::resolve((int)(    $input['post_id'] ?? 0    ));
 
-        if (!get_post($postId)) {
-            return new WP_Error('post_not_found', "Post {$postId} was not found.");
+        if (is_wp_error($post)) {
+            return $post;
         }
 
-        $path = trim((string)(    $input['path'] ?? ''    ));
+        $postId = $post->ID; // phpcs:ignore Zend.NamingConventions.ValidVariableName
+        $path   = trim((string)(    $input['path'] ?? ''    ));
 
         if ($path === '') {
             return new WP_Error('missing_path', 'Field path is required.');

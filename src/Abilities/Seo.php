@@ -2,7 +2,6 @@
 namespace ContentMcpBridge\Abilities;
 
 use ContentMcpBridge\AuditLog;
-use ContentMcpBridge\Settings;
 use WP_Error;
 
 class Seo implements AbilityGroup {
@@ -49,12 +48,8 @@ class Seo implements AbilityGroup {
                 ],
             ],
             'execute_callback'    => AuditLog::wrap('content-mcp-bridge/update-post-seo', [$this, 'updatePostSeo']),
-            'permission_callback' => function (array $input): bool {
-                $postId = isset($input['post_id']) ? (int)$input['post_id'] : 0;
-
-                return current_user_can('edit_post', $postId)
-                    && current_user_can('rank_math_onpage_general')
-                    && Settings::isPostTypeAllowed((string)get_post_type($postId));
+            'permission_callback' => function (): bool {
+                return current_user_can('edit_posts') && current_user_can('rank_math_onpage_general');
             },
             'meta'                => [
                 'annotations' => [
@@ -71,11 +66,13 @@ class Seo implements AbilityGroup {
     }
 
     public function updatePostSeo(array $input) {
-        $postId = isset($input['post_id']) ? (int)$input['post_id'] : 0;
+        $post = PostGuard::resolve(isset($input['post_id']) ? (int)$input['post_id'] : 0);
 
-        if (!get_post($postId)) {
-            return new WP_Error('post_not_found', "Post {$postId} was not found.");
+        if (is_wp_error($post)) {
+            return $post;
         }
+
+        $postId = $post->ID; // phpcs:ignore Zend.NamingConventions.ValidVariableName
 
         $fieldMap = [
             'focus_keyword'    => 'rank_math_focus_keyword',

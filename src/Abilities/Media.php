@@ -78,8 +78,9 @@ class Media implements AbilityGroup {
             },
             'meta'                => [
                 'annotations' => [
-                    'readonly'   => true,
-                    'idempotent' => true,
+                    'readonly'    => true,
+                    'destructive' => false,
+                    'idempotent'  => true,
                 ],
                 'mcp'         => [
                     'public' => true,
@@ -182,10 +183,8 @@ class Media implements AbilityGroup {
                 ],
             ],
             'execute_callback'    => AuditLog::wrap('content-mcp-bridge/replace-media-file', [$this, 'replaceMediaFile']),
-            'permission_callback' => function (array $input): bool {
-                $attachmentId = isset($input['attachment_id']) ? (int)$input['attachment_id'] : 0;
-
-                return current_user_can('edit_post', $attachmentId);
+            'permission_callback' => function (): bool {
+                return current_user_can('upload_files');
             },
             'meta'                => [
                 'annotations' => [
@@ -244,10 +243,8 @@ class Media implements AbilityGroup {
                 ],
             ],
             'execute_callback'    => AuditLog::wrap('content-mcp-bridge/update-media-meta', [$this, 'updateMediaMeta']),
-            'permission_callback' => function (array $input): bool {
-                $attachmentId = isset($input['attachment_id']) ? (int)$input['attachment_id'] : 0;
-
-                return current_user_can('edit_post', $attachmentId);
+            'permission_callback' => function (): bool {
+                return current_user_can('upload_files');
             },
             'meta'                => [
                 'annotations' => [
@@ -294,10 +291,8 @@ class Media implements AbilityGroup {
                 ],
             ],
             'execute_callback'    => AuditLog::wrap('content-mcp-bridge/set-featured-image', [$this, 'setFeaturedImage']),
-            'permission_callback' => function (array $input): bool {
-                $postId = isset($input['post_id']) ? (int)$input['post_id'] : 0;
-
-                return current_user_can('edit_post', $postId);
+            'permission_callback' => function (): bool {
+                return current_user_can('edit_posts');
             },
             'meta'                => [
                 'annotations' => [
@@ -337,10 +332,8 @@ class Media implements AbilityGroup {
                 ],
             ],
             'execute_callback'    => AuditLog::wrap('content-mcp-bridge/delete-media', [$this, 'deleteMedia']),
-            'permission_callback' => function (array $input): bool {
-                $attachmentId = isset($input['attachment_id']) ? (int)$input['attachment_id'] : 0;
-
-                return current_user_can('delete_post', $attachmentId);
+            'permission_callback' => function (): bool {
+                return current_user_can('delete_posts');
             },
             'meta'                => [
                 'annotations' => [
@@ -484,6 +477,10 @@ class Media implements AbilityGroup {
             return new WP_Error('media_not_found', "Media item {$attachmentId} was not found.");
         }
 
+        if (!current_user_can('edit_post', $attachmentId)) {
+            return new WP_Error('permission_denied', 'You do not have permission to replace this media item.');
+        }
+
         if (!wp_http_validate_url($url)) {
             return new WP_Error('invalid_url', "The URL '{$url}' is not valid or not allowed.");
         }
@@ -551,6 +548,10 @@ class Media implements AbilityGroup {
             return new WP_Error('media_not_found', "Media item {$attachmentId} was not found.");
         }
 
+        if (!current_user_can('edit_post', $attachmentId)) {
+            return new WP_Error('permission_denied', 'You do not have permission to update this media item.');
+        }
+
         $updatedFields = [];
         $postFields    = [];
 
@@ -601,6 +602,10 @@ class Media implements AbilityGroup {
             return new WP_Error('post_not_found', "Post {$postId} was not found.");
         }
 
+        if (!current_user_can('edit_post', $postId)) {
+            return new WP_Error('permission_denied', 'You do not have permission to edit this post.');
+        }
+
         if ($attachmentId === 0) {
             delete_post_thumbnail($postId);
 
@@ -636,6 +641,10 @@ class Media implements AbilityGroup {
 
         if (!$attachment || $attachment->post_type !== 'attachment') { // phpcs:ignore Zend.NamingConventions.ValidVariableName
             return new WP_Error('media_not_found', "Media item {$attachmentId} was not found.");
+        }
+
+        if (!current_user_can('delete_post', $attachmentId)) {
+            return new WP_Error('permission_denied', 'You do not have permission to delete this media item.');
         }
 
         $deleted = wp_delete_attachment($attachmentId, true);

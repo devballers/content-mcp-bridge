@@ -61,8 +61,9 @@ class SiteSettings implements AbilityGroup {
             },
             'meta'                => [
                 'annotations' => [
-                    'readonly'   => true,
-                    'idempotent' => true,
+                    'readonly'    => true,
+                    'destructive' => false,
+                    'idempotent'  => true,
                 ],
                 'mcp'         => [
                     'public' => true,

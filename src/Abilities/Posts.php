@@ -74,15 +74,14 @@ class Posts implements AbilityGroup {
                 ],
             ],
             'execute_callback'    => AuditLog::wrap('content-mcp-bridge/list-posts', [$this, 'listPosts']),
-            'permission_callback' => function (array $input): bool {
-                $postType = $input['post_type'] ?? 'page';
-
-                return current_user_can('edit_posts') && Settings::isPostTypeAllowed($postType);
+            'permission_callback' => function (): bool {
+                return current_user_can('edit_posts');
             },
             'meta'                => [
                 'annotations' => [
-                    'readonly'   => true,
-                    'idempotent' => true,
+                    'readonly'    => true,
+                    'destructive' => false,
+                    'idempotent'  => true,
                 ],
                 'mcp'         => [
                     'public' => true,
@@ -129,15 +128,14 @@ class Posts implements AbilityGroup {
                 ],
             ],
             'execute_callback'    => AuditLog::wrap('content-mcp-bridge/get-post', [$this, 'getPost']),
-            'permission_callback' => function (array $input): bool {
-                $postId = (int)(    $input['post_id'] ?? 0    );
-
-                return current_user_can('edit_post', $postId) && Settings::isPostTypeAllowed((string)get_post_type($postId));
+            'permission_callback' => function (): bool {
+                return current_user_can('edit_posts');
             },
             'meta'                => [
                 'annotations' => [
-                    'readonly'   => true,
-                    'idempotent' => true,
+                    'readonly'    => true,
+                    'destructive' => false,
+                    'idempotent'  => true,
                 ],
                 'mcp'         => [
                     'public' => true,
@@ -201,10 +199,8 @@ class Posts implements AbilityGroup {
                 ],
             ],
             'execute_callback'    => AuditLog::wrap('content-mcp-bridge/update-post', [$this, 'updatePost']),
-            'permission_callback' => function (array $input): bool {
-                $postId = (int)(    $input['post_id'] ?? 0    );
-
-                return current_user_can('edit_post', $postId) && Settings::isPostTypeAllowed((string)get_post_type($postId));
+            'permission_callback' => function (): bool {
+                return current_user_can('edit_posts');
             },
             'meta'                => [
                 'annotations' => [
@@ -226,7 +222,11 @@ class Posts implements AbilityGroup {
         $perPage  = min(max((int)(    $input['per_page'] ?? 20    ), 1), 100);
 
         if (!post_type_exists($postType)) {
-            return new WP_Error('invalid_post_type', "Post type '{$postType}' does not exist.");
+            return new WP_Error('invalid_parameter', "Post type '{$postType}' does not exist.");
+        }
+
+        if (!Settings::isPostTypeAllowed($postType)) {
+            return new WP_Error('permission_denied', "The '{$postType}' post type is not enabled for MCP access.");
         }
 
         $previousLanguage = '';
@@ -275,11 +275,10 @@ class Posts implements AbilityGroup {
     }
 
     public function getPost(array $input) {
-        $postId = (int)(    $input['post_id'] ?? 0    );
-        $post   = get_post($postId);
+        $post = PostGuard::resolve((int)(    $input['post_id'] ?? 0    ));
 
-        if (!$post) {
-            return new WP_Error('post_not_found', "Post {$postId} was not found.");
+        if (is_wp_error($post)) {
+            return $post;
         }
 
         $result = [
@@ -323,13 +322,13 @@ class Posts implements AbilityGroup {
     }
 
     public function updatePost(array $input) {
-        $postId = (int)(    $input['post_id'] ?? 0    );
-        $post   = get_post($postId);
+        $post = PostGuard::resolve((int)(    $input['post_id'] ?? 0    ));
 
-        if (!$post) {
-            return new WP_Error('post_not_found', "Post {$postId} was not found.");
+        if (is_wp_error($post)) {
+            return $post;
         }
 
+        $postId       = $post->ID; // phpcs:ignore Zend.NamingConventions.ValidVariableName
         $statusChange = isset($input['status']) ? (string)$input['status'] : '';
 
         if (in_array($statusChange, ['publish', 'private'], true)) {
