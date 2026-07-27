@@ -24,10 +24,6 @@ class Role {
         self::sync();
     }
 
-    public static function onDeactivate(): void {
-        remove_role(self::SLUG);
-    }
-
     private static function ensureRoleExists(): void {
         if (!get_role(self::SLUG)) {
             add_role(self::SLUG, self::LABEL, ['read' => true]);

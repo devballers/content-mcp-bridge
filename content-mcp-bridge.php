@@ -33,7 +33,6 @@ spl_autoload_register(function (string $class): void {
 
 register_activation_hook(CONTENT_MCP_BRIDGE_FILE, ['ContentMcpBridge\\AuditLog', 'onActivate']);
 register_activation_hook(CONTENT_MCP_BRIDGE_FILE, ['ContentMcpBridge\\Role', 'onActivate']);
-register_deactivation_hook(CONTENT_MCP_BRIDGE_FILE, ['ContentMcpBridge\\Role', 'onDeactivate']);
 
 add_action('plugins_loaded', function (): void {
     if (!class_exists('WP\\MCP\\Core\\McpAdapter')) {
