@@ -31,14 +31,14 @@ installer type. Your project's `composer.json` needs a matching
 
 ### From the Bitbucket repo (recommended)
 
-This repo is public at `bitbucket.org/codeballers/content-mcp-bridge`, tagged
+This repo lives at `bitbucket.org/codeballers/content-mcp-bridge`, tagged
 starting at `v0.1.0`. Point a `git` repository (not `vcs` — an explicit
 `git` type skips Bitbucket's API-based driver entirely and sticks to a plain
-`git` clone) at the HTTPS URL and require it like any other package:
+`git` clone) at the SSH URL and require it like any other package:
 
 ```json
 "repositories": [
-    { "type": "git", "url": "https://bitbucket.org/codeballers/content-mcp-bridge.git" }
+    { "type": "git", "url": "git@bitbucket.org:codeballers/content-mcp-bridge.git" }
 ],
 "require": {
     "devballers/content-mcp-bridge": "^0.1"
@@ -47,12 +47,19 @@ starting at `v0.1.0`. Point a `git` repository (not `vcs` — an explicit
 
 Run `composer update devballers/content-mcp-bridge`.
 
-Because the repo is public, this needs no credentials, SSH keys or auth
-setup at all — on your machine or in CI. The only requirement is that
-`git` itself is installed wherever Composer runs (it does a real clone,
-not a dist/zip download); most dev machines already have it, but a minimal
-CI image (e.g. plain `php:8.3`) may need `apt-get install -y git` added
-alongside whatever else it installs.
+**Use SSH, not HTTPS, even though the repo is public.** Bitbucket doesn't
+offer a truly anonymous/generic HTTPS clone URL — its HTTPS clone links are
+tied to a specific authenticated account, which means every machine or CI
+agent using it depends on one person's individual Bitbucket access rather
+than something project-owned. SSH avoids that entirely via a **deploy key**:
+a keypair scoped to this one repo (read-only), not tied to any individual's
+account, added under **this repo's own Repository settings → Access keys**
+(public half) and then as the private key wherever Composer needs to clone
+it — your own machine's SSH agent for local dev, or the consuming project's
+CI configuration for automated builds. See that project's own setup docs
+for exactly where the private key goes in CI; on a dev machine, it just
+needs to be loaded into your SSH agent (`ssh-add`) the same way any other
+key would be.
 
 ### Local development against an uncommitted clone
 
