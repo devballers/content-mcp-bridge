@@ -1,9 +1,9 @@
 # Content MCP Bridge
 
 Exposes WordPress content-editing abilities (posts, media, ACF fields, Rank
-Math SEO, WPML translations) to an MCP client such as Claude, scoped to one
-WordPress user, a chosen set of post types, and whichever integrations you
-enable.
+Math SEO, WPML translations, Gravity Forms entries) to an MCP client such as
+Claude, scoped to one WordPress user, a chosen set of post types, and
+whichever integrations you enable.
 
 ## Requirements
 
@@ -152,7 +152,7 @@ repository is faster than round-tripping through git:
      accounts with the AI Content Editor role are listed).
    - Choose which post types can be listed/read/edited over MCP, whether
      read-only mode should disable all write abilities, and which detected
-     integrations (WPML, Rank Math, ACF) to expose.
+     integrations (WPML, Rank Math, ACF, Gravity Forms) to expose.
    - Once a key and user are both set, the page shows the live **Server
      URL** — paste that into Claude's "Remote MCP server URL" field.
 

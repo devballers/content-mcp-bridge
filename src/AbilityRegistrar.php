@@ -3,6 +3,7 @@ namespace ContentMcpBridge;
 
 use ContentMcpBridge\Abilities\AbilityGroup;
 use ContentMcpBridge\Abilities\Diagnostics;
+use ContentMcpBridge\Abilities\GravityForms;
 use ContentMcpBridge\Abilities\Media;
 use ContentMcpBridge\Abilities\Menus;
 use ContentMcpBridge\Abilities\PostFields;
@@ -48,6 +49,10 @@ class AbilityRegistrar {
         if (!empty($enabled['wpml'])) {
             $this->register(new Menus(), $readOnly);
             $this->register(new Translations(), $readOnly);
+        }
+
+        if (!empty($enabled['gravity_forms'])) {
+            $this->register(new GravityForms(), $readOnly);
         }
     }
 

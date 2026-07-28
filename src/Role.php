@@ -75,6 +75,10 @@ class Role {
             $caps[] = 'rank_math_onpage_general';
         }
 
+        if (!empty($settings['integrations']['gravity_forms'])) {
+            $caps[] = 'gravity_forms_view_entries';
+        }
+
         $caps = array_merge($caps, self::thirdPartyCapabilities());
 
         return array_values(array_unique(array_filter($caps)));

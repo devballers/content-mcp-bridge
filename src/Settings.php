@@ -11,6 +11,7 @@ class Settings {
         'rank_math'         => 'Rank Math SEO',
         'acf_fields'        => 'ACF post fields',
         'acf_site_settings' => 'ACF site settings options page',
+        'gravity_forms'     => 'Gravity Forms (read entries)',
     ];
 
     public function __construct() {
@@ -78,6 +79,7 @@ class Settings {
             'rank_math'         => class_exists('RankMath'),
             'acf_fields'        => function_exists('get_fields'),
             'acf_site_settings' => function_exists('acf_add_options_page'),
+            'gravity_forms'     => class_exists('GFAPI'),
             default             => false,
         };
     }
