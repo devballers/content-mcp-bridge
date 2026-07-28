@@ -22,6 +22,38 @@ class Server {
 
     public function __construct() {
         add_action('mcp_adapter_init', [$this, 'registerServer']);
+        add_filter('rest_post_dispatch', [$this, 'hideFromRestIndex'], 10, 1);
+    }
+
+    /**
+     * WordPress's REST index (/wp-json/ and /wp-json/mcp/) publicly lists
+     * every registered route by default, with no authentication — and our
+     * route's path IS the secret key, so leaving it in the index defeats
+     * the entire point of a secret URL. Strips any route matching our
+     * namespace/slug prefix out of an index response before it's served.
+     */
+    public function hideFromRestIndex($response) {
+        if (!$response instanceof \WP_REST_Response) {
+            return $response;
+        }
+
+        $data = $response->get_data();
+
+        if (!is_array($data) || !isset($data['routes']) || !is_array($data['routes'])) {
+            return $response;
+        }
+
+        $prefix = '/'.self::ROUTE_NAMESPACE.'/bridge-';
+
+        foreach (array_keys($data['routes']) as $route) {
+            if (is_string($route) && str_contains($route, $prefix)) {
+                unset($data['routes'][$route]);
+            }
+        }
+
+        $response->set_data($data);
+
+        return $response;
     }
 
     /**
