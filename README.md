@@ -70,37 +70,46 @@ installer type. Your project's `composer.json` needs a matching
 }
 ```
 
-### From the Bitbucket repo (recommended)
+### From the GitHub repo (recommended)
 
-This repo lives at `bitbucket.org/codeballers/content-mcp-bridge`, tagged
-starting at `v0.1.0`. Point a `git` repository (not `vcs` — an explicit
-`git` type skips Bitbucket's API-based driver entirely and sticks to a plain
-`git` clone) at the SSH URL and require it like any other package:
+This repo lives at `github.com/codeballers/content-mcp-bridge`, tagged
+starting at `v0.1.0`. GitHub's HTTPS clone URLs are genuinely anonymous even
+for a plain `git` repository type, so requiring it is a single block with no
+deploy key or SSH setup involved:
 
 ```json
 "repositories": [
-    { "type": "git", "url": "git@bitbucket.org:codeballers/content-mcp-bridge.git" }
+    { "type": "git", "url": "https://github.com/codeballers/content-mcp-bridge.git" }
 ],
 "require": {
-    "devballers/content-mcp-bridge": "^0.1"
+    "devballers/content-mcp-bridge": "^0.2"
 }
 ```
 
 Run `composer update devballers/content-mcp-bridge`.
 
-**Use SSH, not HTTPS, even though the repo is public.** Bitbucket doesn't
-offer a truly anonymous/generic HTTPS clone URL — its HTTPS clone links are
-tied to a specific authenticated account, which means every machine or CI
-agent using it depends on one person's individual Bitbucket access rather
-than something project-owned. SSH avoids that entirely via a **deploy key**:
-a keypair scoped to this one repo (read-only), not tied to any individual's
-account, added under **this repo's own Repository settings → Access keys**
-(public half) and then as the private key wherever Composer needs to clone
-it — your own machine's SSH agent for local dev, or the consuming project's
-CI configuration for automated builds. See that project's own setup docs
-for exactly where the private key goes in CI; on a dev machine, it just
-needs to be loaded into your SSH agent (`ssh-add`) the same way any other
-key would be.
+### Installing a specific version without Composer
+
+Every tagged release also publishes a self-contained zip — the same pattern
+as [MCP Adapter's own releases](#installing-mcp-adapter) above. Grab
+`content-mcp-bridge.zip` from that tag's page under
+[Releases](https://github.com/codeballers/content-mcp-bridge/releases) and
+drop it straight into `wp-content/plugins/`.
+
+## Versioning
+
+Releases are tagged `vX.Y.Z` on GitHub. Each tag publishes its own zip at a
+version-specific URL:
+
+```
+https://github.com/codeballers/content-mcp-bridge/releases/download/vX.Y.Z/content-mcp-bridge.zip
+```
+
+Composer resolves the same tags automatically through the `git` repository
+above — `^0.2` pins to the latest `0.2.x` release, an exact tag like `0.2.2`
+pins to that build precisely. A release workflow rejects any tag that
+doesn't match the `Version:` header in `content-mcp-bridge.php`, so the
+header, the git tag, and the release URL can never drift apart.
 
 ### Local development against an uncommitted clone
 
