@@ -10,8 +10,49 @@ enable.
 - WordPress 6.5+ (for the `Requires Plugins` dependency check)
 - PHP 8.0+
 - The **[MCP Adapter](https://github.com/wordpress/mcp-adapter)** plugin, installed and active.
-  This plugin declares it as a Composer dependency, so requiring this plugin pulls it in
-  automatically — but it still needs to be **activated separately** in wp-admin.
+  This plugin doesn't declare it as a Composer dependency (see
+  [Installing MCP Adapter](#installing-mcp-adapter) below for why) — add it to
+  your own project's `composer.json` `require`, and activate it separately in
+  wp-admin.
+
+### Installing MCP Adapter
+
+Resolving `wordpress/mcp-adapter` from Packagist normally (`"wordpress/mcp-adapter":
+"^0.5.0"` with no extra repository) installs it from its raw git source — which
+depends on `wordpress/php-mcp-schema` and needs its own internal
+`composer install` run inside its installed folder (`--working-dir=wp/plugins/mcp-adapter`
+or wherever it lands) before it'll actually load. Skip that step entirely by
+requiring MCP Adapter's own pre-built release zip instead — the same artifact
+its README tells you to download and drop into `wp-content/plugins` directly,
+already self-contained with its dependencies bundled:
+
+```json
+"repositories": [
+    {
+        "type": "package",
+        "package": {
+            "name": "wordpress/mcp-adapter",
+            "version": "0.5.0",
+            "type": "wordpress-plugin",
+            "dist": {
+                "type": "zip",
+                "url": "https://github.com/WordPress/mcp-adapter/releases/download/v0.5.0/mcp-adapter.zip"
+            },
+            "require": {
+                "composer/installers": "^2.2.0"
+            }
+        }
+    }
+],
+"require": {
+    "wordpress/mcp-adapter": "*"
+}
+```
+
+Because this is declared inline (not resolved from Packagist), it needs updating
+by hand — version number and download URL both — whenever you want a newer MCP
+Adapter release; same maintenance shape as any other pinned zip-based package
+(e.g. WPML's packages in this ecosystem's typical `composer.json`).
 
 ## Installing via Composer
 
@@ -78,8 +119,8 @@ repository is faster than round-tripping through git:
 ## Setup after activation
 
 1. Activate **MCP Adapter**, then **Content MCP Bridge**, in wp-admin → Plugins
-   (also add `"wordpress/mcp-adapter"` to your project's own Composer
-   `require` — see Requirements above).
+   (see [Installing MCP Adapter](#installing-mcp-adapter) above for the
+   recommended way to require it).
 2. Go to **Users → Add New** (or edit an existing account) and assign it the
    **AI Content Editor** role that this plugin creates. This is the account
    every MCP request runs as — never assign it Administrator.
