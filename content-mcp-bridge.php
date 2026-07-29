@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Content MCP Bridge
  * Description: Exposes WordPress content-editing abilities to an MCP client, scoped to one user, chosen post types and detected integrations.
- * Version: 0.2.4
+ * Version: 0.2.5
  * Requires PHP: 8.0
  * Requires Plugins: mcp-adapter
  * Author: devballers
