@@ -413,13 +413,13 @@ class Media implements AbilityGroup {
 
         $this->loadMediaIncludes();
 
-        $temporaryFile = download_url($url);
+        $temporaryFile = $this->fetchToTemporaryFile($url);
 
         if (is_wp_error($temporaryFile)) {
             return $temporaryFile;
         }
 
-        $filename = $input['filename'] ?? basename((string)wp_parse_url($url, PHP_URL_PATH));
+        $filename = $input['filename'] ?? rawurldecode(basename((string)wp_parse_url($url, PHP_URL_PATH)));
 
         if (!$filename) {
             $filename = 'upload-'.time();
@@ -493,7 +493,7 @@ class Media implements AbilityGroup {
 
         $this->loadMediaIncludes();
 
-        $temporaryFile = download_url($url);
+        $temporaryFile = $this->fetchToTemporaryFile($url);
 
         if (is_wp_error($temporaryFile)) {
             return $temporaryFile;
@@ -663,5 +663,50 @@ class Media implements AbilityGroup {
         require_once ABSPATH.'wp-admin/includes/file.php';
         require_once ABSPATH.'wp-admin/includes/media.php';
         require_once ABSPATH.'wp-admin/includes/image.php';
+    }
+
+    private function fetchToTemporaryFile(string $url) {
+        $parts = wp_parse_url($url);
+        $path  = (string)(    $parts['path'] ?? ''    );
+
+        $candidatePaths = [self::encodeNonAsciiBytes($path)];
+
+        if ($path !== '' && class_exists(\Normalizer::class)) {
+            $decoded = rawurldecode($path);
+
+            foreach ([\Normalizer::FORM_C, \Normalizer::FORM_D] as $form) {
+                $normalized = \Normalizer::normalize($decoded, $form);
+
+                if (is_string($normalized) && $normalized !== '') {
+                    $candidatePaths[] = implode('/', array_map('rawurlencode', explode('/', $normalized)));
+                }
+            }
+        }
+
+        $base = $parts['scheme'].'://'.$parts['host']
+            .(isset($parts['port']) ? ':'.$parts['port'] : '');
+        $query = isset($parts['query']) ? '?'.$parts['query'] : '';
+
+        $result = new WP_Error('download_failed', 'The file could not be downloaded.');
+
+        foreach (array_unique($candidatePaths) as $candidatePath) {
+            $result = download_url($base.$candidatePath.$query);
+
+            if (!is_wp_error($result)) {
+                return $result;
+            }
+        }
+
+        return $result;
+    }
+
+    private static function encodeNonAsciiBytes(string $path): string {
+        return (string)preg_replace_callback(
+            '/[^\x21-\x7E]|[ "<>{}|\\\\^`]/',
+            static function (array $match): string {
+                return rawurlencode($match[0]);
+            },
+            $path
+        );
     }
 }

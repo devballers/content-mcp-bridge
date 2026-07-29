@@ -71,6 +71,8 @@ class Role {
             $caps = array_merge($caps, self::postTypeCapabilities($postType));
         }
 
+        $caps = array_merge($caps, self::taxonomyCapabilities($settings['enabled_post_types']));
+
         if (!empty($settings['integrations']['rank_math'])) {
             $caps[] = 'rank_math_onpage_general';
         }
@@ -117,6 +119,30 @@ class Role {
         }
 
         return $caps;
+    }
+
+    /**
+     * Pulls every capability string mapped by the taxonomies attached to
+     * the enabled post types (manage_terms/manage_categories, edit_terms,
+     * delete_terms, assign_terms — including custom ones like
+     * manage_product_terms), matching the gate the taxonomy abilities
+     * apply: enabling a post type exposes its taxonomies, nothing else.
+     *
+     * @param string[] $enabledPostTypes
+     * @return string[]
+     */
+    private static function taxonomyCapabilities(array $enabledPostTypes): array {
+        $caps = [];
+
+        foreach (get_taxonomies([], 'objects') as $taxonomy) {
+            if (!array_intersect($enabledPostTypes, (array)$taxonomy->object_type)) { // phpcs:ignore Zend.NamingConventions.ValidVariableName
+                continue;
+            }
+
+            $caps = array_merge($caps, array_map('strval', (array)$taxonomy->cap));
+        }
+
+        return array_values(array_unique($caps));
     }
 
     /**

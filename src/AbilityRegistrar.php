@@ -10,6 +10,7 @@ use ContentMcpBridge\Abilities\PostFields;
 use ContentMcpBridge\Abilities\Posts;
 use ContentMcpBridge\Abilities\Seo;
 use ContentMcpBridge\Abilities\SiteSettings;
+use ContentMcpBridge\Abilities\Taxonomies;
 use ContentMcpBridge\Abilities\Translations;
 
 class AbilityRegistrar {
@@ -31,6 +32,7 @@ class AbilityRegistrar {
         $enabled  = $settings['integrations'];
 
         $this->register(new Posts(), $readOnly);
+        $this->register(new Taxonomies(), $readOnly);
         $this->register(new Media(), $readOnly);
         $this->register(new Diagnostics(), $readOnly);
 

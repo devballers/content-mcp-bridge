@@ -72,14 +72,14 @@ installer type. Your project's `composer.json` needs a matching
 
 ### From the GitHub repo (recommended)
 
-This repo lives at `github.com/devballers/content-mcp-bridge`, tagged
+This repo lives at `github.com/codeballers/content-mcp-bridge`, tagged
 starting at `v0.1.0`. GitHub's HTTPS clone URLs are genuinely anonymous even
 for a plain `git` repository type, so requiring it is a single block with no
 deploy key or SSH setup involved:
 
 ```json
 "repositories": [
-    { "type": "git", "url": "https://github.com/devballers/content-mcp-bridge.git" }
+    { "type": "git", "url": "https://github.com/codeballers/content-mcp-bridge.git" }
 ],
 "require": {
     "devballers/content-mcp-bridge": "^0.2"
@@ -93,7 +93,7 @@ Run `composer update devballers/content-mcp-bridge`.
 Every tagged release also publishes a self-contained zip — the same pattern
 as [MCP Adapter's own releases](#installing-mcp-adapter) above. Grab
 `content-mcp-bridge.zip` from that tag's page under
-[Releases](https://github.com/devballers/content-mcp-bridge/releases) and
+[Releases](https://github.com/codeballers/content-mcp-bridge/releases) and
 drop it straight into `wp-content/plugins/`.
 
 ## Versioning
@@ -102,7 +102,7 @@ Releases are tagged `vX.Y.Z` on GitHub. Each tag publishes its own zip at a
 version-specific URL:
 
 ```
-https://github.com/devballers/content-mcp-bridge/releases/download/vX.Y.Z/content-mcp-bridge.zip
+https://github.com/codeballers/content-mcp-bridge/releases/download/vX.Y.Z/content-mcp-bridge.zip
 ```
 
 Composer resolves the same tags automatically through the `git` repository
