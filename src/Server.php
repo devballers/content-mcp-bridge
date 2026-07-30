@@ -13,7 +13,8 @@ use WP\MCP\Transport\HttpTransport;
  * in the URL. Every request is mapped to the WordPress user chosen in
  * Settings → Content MCP Bridge.
  *
- * Requires CONTENT_MCP_BRIDGE_KEY (32+ chars) in the environment and an AI
+ * Requires CONTENT_MCP_BRIDGE_KEY (32+ chars) as a wp-config.php constant
+ * or in the environment, and an AI
  * user configured in the plugin settings; the server is not created when
  * either is missing.
  */
@@ -58,11 +59,17 @@ class Server {
 
     /**
      * Reads CONTENT_MCP_BRIDGE_KEY from whichever mechanism a project uses
-     * to populate its environment — the $_ENV superglobal (e.g. via
-     * vlucas/phpdotenv) or a plain putenv()/host-panel env var, which only
-     * shows up via getenv() and never touches $_ENV.
+     * to configure it — a wp-config.php constant, the $_ENV superglobal
+     * (e.g. via vlucas/phpdotenv) or a plain putenv()/host-panel env var,
+     * which only shows up via getenv() and never touches $_ENV. The
+     * constant wins when both are set, being the most explicit of the
+     * three.
      */
     public static function currentKey(): string {
+        if (defined('CONTENT_MCP_BRIDGE_KEY') && constant('CONTENT_MCP_BRIDGE_KEY') !== '') {
+            return (string)constant('CONTENT_MCP_BRIDGE_KEY');
+        }
+
         $fromEnv = $_ENV['CONTENT_MCP_BRIDGE_KEY'] ?? '';
 
         if ($fromEnv !== '') {

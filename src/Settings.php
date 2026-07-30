@@ -254,14 +254,15 @@ class Settings {
                 <td>
                     <input type="text" id="cmb-generated-key" class="regular-text" readonly
                         onclick="this.select();"
-                        placeholder="Click Generate, then copy into CONTENT_MCP_BRIDGE_KEY in your environment">
+                        placeholder="Click Generate, then copy into CONTENT_MCP_BRIDGE_KEY in wp-config.php or your environment">
                     <button type="button" class="button" id="cmb-generate-key">Generate a New Key</button>
                     <p class="description">
                         Generated locally in your browser — never sent to or stored by this site.
-                        Copy it into the <code>CONTENT_MCP_BRIDGE_KEY</code> environment variable
-                        (your host's environment settings, or a local <code>.env</code> file), then
-                        reload this page. Changing it immediately invalidates the server URL below
-                        for everyone currently using it.
+                        Copy it into a <code>CONTENT_MCP_BRIDGE_KEY</code> constant in
+                        <code>wp-config.php</code>, or into the environment variable of the same
+                        name (your host's environment settings, or a local <code>.env</code> file),
+                        then reload this page. Changing it immediately invalidates the server URL
+                        below for everyone currently using it.
                     </p>
                 </td>
             </tr>
@@ -278,8 +279,9 @@ class Settings {
                         </p>
                     <?php } else { ?>
                         <p class="description">
-                            Not active yet: set <code>CONTENT_MCP_BRIDGE_KEY</code> in your environment
-                            (32+ characters — use the generator above) and choose an AI content user
+                            Not active yet: set <code>CONTENT_MCP_BRIDGE_KEY</code> in
+                            <code>wp-config.php</code> or your environment (32+ characters — use the
+                            generator above) and choose an AI content user
                             below to activate the server and see its URL here.
                         </p>
                     <?php } ?>
