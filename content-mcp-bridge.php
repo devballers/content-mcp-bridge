@@ -5,7 +5,7 @@
  * Version: 0.2.6
  * Requires PHP: 8.0
  * Requires Plugins: mcp-adapter
- * Author: devballers
+ * Author: Ballers
  * Text Domain: content-mcp-bridge
  */
 
