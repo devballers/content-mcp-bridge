@@ -9,10 +9,12 @@ use WP_Error;
 class Translations implements AbilityGroup {
     public function registerReadOnly(): void {
         $this->registerGetPostTranslations();
+        $this->registerGetTermTranslations();
     }
 
     public function registerWrite(): void {
         $this->registerCreatePostTranslation();
+        $this->registerCreateTermTranslation();
     }
 
     private function registerGetPostTranslations(): void {
@@ -155,6 +157,146 @@ class Translations implements AbilityGroup {
         ]);
     }
 
+    private function registerGetTermTranslations(): void {
+        wp_register_ability('content-mcp-bridge/get-term-translations', [
+            'label'               => 'Get term translations',
+            'description'         => 'Returns all WPML language versions of a taxonomy term with name, slug, description and parent.',
+            'category'            => 'content-mcp-bridge',
+            'input_schema'        => [
+                'type'                 => 'object',
+                'properties'           => [
+                    'term_id'  => [
+                        'type'        => 'integer',
+                        'description' => 'ID of the term in any language.',
+                    ],
+                    'taxonomy' => [
+                        'type'        => 'string',
+                        'description' => 'Taxonomy slug, e.g. destination, category.',
+                    ],
+                ],
+                'required'             => ['term_id', 'taxonomy'],
+                'additionalProperties' => false,
+            ],
+            'output_schema'       => [
+                'type'       => 'object',
+                'properties' => [
+                    'term_id'           => ['type' => 'integer'],
+                    'taxonomy'          => ['type' => 'string'],
+                    'original_language' => ['type' => 'string'],
+                    'translations'      => [
+                        'type'  => 'array',
+                        'items' => [
+                            'type'       => 'object',
+                            'properties' => [
+                                'language'      => ['type' => 'string'],
+                                'language_name' => ['type' => 'string'],
+                                'term_id'       => [
+                                    'type' => [
+                                        'integer',
+                                        'null',
+                                    ],
+                                ],
+                                'status'        => ['type' => 'string'],
+                                'name'          => ['type' => 'string'],
+                                'slug'          => ['type' => 'string'],
+                                'description'   => ['type' => 'string'],
+                                'parent_id'     => ['type' => 'integer'],
+                                'count'         => ['type' => 'integer'],
+                                'url'           => ['type' => 'string'],
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+            'execute_callback'    => AuditLog::wrap('content-mcp-bridge/get-term-translations', [$this, 'getTermTranslations']),
+            'permission_callback' => function (): bool {
+                return current_user_can('edit_posts');
+            },
+            'meta'                => [
+                'annotations' => [
+                    'readonly'    => true,
+                    'destructive' => false,
+                    'idempotent'  => true,
+                ],
+                'mcp'         => [
+                    'public' => true,
+                    'type'   => 'tool',
+                ],
+            ],
+        ]);
+    }
+
+    private function registerCreateTermTranslation(): void {
+        wp_register_ability('content-mcp-bridge/create-term-translation', [
+            'label'               => 'Create term translation',
+            'description'         => 'Creates a WPML translation of a taxonomy term, linked to the original translation group. The translated parent is resolved automatically so hierarchy is preserved. Safe to re-run: an existing translation is updated instead of duplicated.',
+            'category'            => 'content-mcp-bridge',
+            'input_schema'        => [
+                'type'                 => 'object',
+                'properties'           => [
+                    'term_id'     => [
+                        'type'        => 'integer',
+                        'description' => 'ID of the term to translate from.',
+                    ],
+                    'taxonomy'    => [
+                        'type'        => 'string',
+                        'description' => 'Taxonomy slug, e.g. destination, category.',
+                    ],
+                    'language'    => [
+                        'type'        => 'string',
+                        'description' => 'Target WPML language code, e.g. ru, fi, et.',
+                    ],
+                    'name'        => [
+                        'type'        => 'string',
+                        'description' => 'Translated term name. Defaults to the source name.',
+                    ],
+                    'slug'        => [
+                        'type'        => 'string',
+                        'description' => 'Translated slug. Generated from the translated name when omitted.',
+                    ],
+                    'description' => [
+                        'type'        => 'string',
+                        'description' => 'Translated term description. Defaults to the source description.',
+                    ],
+                ],
+                'required'             => [
+                    'term_id',
+                    'taxonomy',
+                    'language',
+                ],
+                'additionalProperties' => false,
+            ],
+            'output_schema'       => [
+                'type'       => 'object',
+                'properties' => [
+                    'term_id'   => ['type' => 'integer'],
+                    'taxonomy'  => ['type' => 'string'],
+                    'language'  => ['type' => 'string'],
+                    'name'      => ['type' => 'string'],
+                    'slug'      => ['type' => 'string'],
+                    'parent_id' => ['type' => 'integer'],
+                    'created'   => ['type' => 'boolean'],
+                    'url'       => ['type' => 'string'],
+                ],
+            ],
+            'execute_callback'    => AuditLog::wrap('content-mcp-bridge/create-term-translation', [$this, 'createTermTranslation']),
+            'permission_callback' => function (): bool {
+                return current_user_can('edit_posts');
+            },
+            'meta'                => [
+                'annotations' => [
+                    'readonly'    => false,
+                    'destructive' => false,
+                    'idempotent'  => true,
+                ],
+                'mcp'         => [
+                    'public' => true,
+                    'type'   => 'tool',
+                ],
+            ],
+        ]);
+    }
+
     public function getPostTranslations(array $input) {
         if (!Wpml::isEnabled()) {
             return new WP_Error('wpml_not_active', 'WPML is not active on this site.');
@@ -273,6 +415,348 @@ class Translations implements AbilityGroup {
             'url'         => (string)get_permalink($newId),
             'copied_meta' => $copiedMeta,
         ];
+    }
+
+    public function getTermTranslations(array $input) {
+        if (!Wpml::isEnabled()) {
+            return new WP_Error('wpml_not_active', 'WPML is not active on this site.');
+        }
+
+        $taxonomyObject = Taxonomies::resolve((string)(    $input['taxonomy'] ?? ''    ));
+
+        if (is_wp_error($taxonomyObject)) {
+            return $taxonomyObject;
+        }
+
+        $taxonomy = $taxonomyObject->name;
+        $termId   = (int)(    $input['term_id'] ?? 0    );
+        $term     = self::rawTerm($termId, $taxonomy);
+
+        if (!$term) {
+            return new WP_Error('term_not_found', "Term {$termId} was not found in taxonomy '{$taxonomy}'.");
+        }
+
+        $translations = [];
+
+        foreach (Wpml::getAllActiveLanguages() as $code => $language) {
+            $languageName   = $language['native_name'] ?? $language['display_name'] ?? $code;
+            $translatedId   = self::findTranslatedTermId($termId, $taxonomy, $code);
+            $translatedTerm = $translatedId ? self::rawTerm($translatedId, $taxonomy) : null;
+
+            if ($translatedTerm) {
+                $translations[] = [
+                    'language'      => $code,
+                    'language_name' => $languageName,
+                    'term_id'       => $translatedId,
+                    'status'        => 'translated',
+                    'name'          => $translatedTerm->name,
+                    'slug'          => $translatedTerm->slug,
+                    'description'   => (string)$translatedTerm->description,
+                    'parent_id'     => (int)$translatedTerm->parent,
+                    'count'         => (int)$translatedTerm->count,
+                    'url'           => self::termUrlInLanguage($translatedId, $taxonomy, $code),
+                ];
+            } else {
+                $translations[] = [
+                    'language'      => $code,
+                    'language_name' => $languageName,
+                    'term_id'       => null,
+                    'status'        => 'missing',
+                    'name'          => '',
+                    'slug'          => '',
+                    'description'   => '',
+                    'parent_id'     => 0,
+                    'count'         => 0,
+                    'url'           => '',
+                ];
+            }
+        }
+
+        return [
+            'term_id'           => $termId,
+            'taxonomy'          => $taxonomy,
+            'original_language' => self::termLanguage($termId, $taxonomy),
+            'translations'      => $translations,
+        ];
+    }
+
+    public function createTermTranslation(array $input) {
+        if (!Wpml::isEnabled()) {
+            return new WP_Error('wpml_not_active', 'WPML is not active on this site.');
+        }
+
+        $taxonomyObject = Taxonomies::resolve((string)(    $input['taxonomy'] ?? ''    ));
+
+        if (is_wp_error($taxonomyObject)) {
+            return $taxonomyObject;
+        }
+
+        if (!current_user_can($taxonomyObject->cap->edit_terms)) {
+            return new WP_Error('cannot_create', 'You are not allowed to create terms in this taxonomy.');
+        }
+
+        $taxonomy = $taxonomyObject->name;
+        $sourceId = (int)(    $input['term_id'] ?? 0    );
+        $language = (string)(    $input['language'] ?? ''    );
+        $source   = self::rawTerm($sourceId, $taxonomy);
+
+        if (!$source) {
+            return new WP_Error('term_not_found', "Term {$sourceId} was not found in taxonomy '{$taxonomy}'.");
+        }
+
+        if (!array_key_exists($language, Wpml::getAllActiveLanguages())) {
+            return new WP_Error('invalid_language', "Language '{$language}' is not active on this site.");
+        }
+
+        $sourceLanguage = self::termLanguage($sourceId, $taxonomy);
+
+        if ($language === $sourceLanguage) {
+            return new WP_Error('same_language', "Term {$sourceId} is already in language '{$language}'.");
+        }
+
+        $name        = trim((string)(    $input['name'] ?? $source->name    ));
+        $description = (string)(    $input['description'] ?? $source->description    );
+        $slug        = (string)(    $input['slug'] ?? ''    );
+
+        if ($name === '') {
+            return new WP_Error('invalid_parameter', 'name cannot be empty.');
+        }
+
+        $parentId = $this->resolveTranslatedTermParent($source, $taxonomy, $language);
+
+        if (is_wp_error($parentId)) {
+            return $parentId;
+        }
+
+        $existingId = self::findTranslatedTermId($sourceId, $taxonomy, $language);
+        $existing   = $existingId && $existingId !== $sourceId ? self::rawTerm($existingId, $taxonomy) : null;
+
+        // Both branches run inside the target language: WPML's auto-adjust
+        // rewrites every get_term() call to the current language's version of
+        // the term, so updating term 1402 (ru) from an et request context
+        // would silently operate on its et counterpart instead — and creating
+        // would collide with the ru slug that "wasn't there".
+        $previousLanguage = Wpml::getCurrentLanguage();
+        Wpml::switchLanguage($language);
+
+        if ($existing) {
+            $args = [
+                'name'        => $name,
+                'description' => $description,
+                'parent'      => $parentId,
+            ];
+
+            // An omitted slug means "leave the existing one alone" — passing
+            // '' would make wp_update_term regenerate it from the name.
+            if ($slug !== '') {
+                $args['slug'] = $slug;
+            }
+
+            $updated = wp_update_term($existingId, $taxonomy, $args);
+
+            if ($previousLanguage) {
+                Wpml::switchLanguage($previousLanguage);
+            }
+
+            if (is_wp_error($updated)) {
+                return $updated;
+            }
+
+            return $this->termTranslationResult((int)$updated['term_id'], $taxonomy, $language, false);
+        }
+
+        $created = wp_insert_term($name, $taxonomy, [
+            'slug'        => $slug,
+            'description' => $description,
+            'parent'      => $parentId,
+        ]);
+
+        if ($previousLanguage) {
+            Wpml::switchLanguage($previousLanguage);
+        }
+
+        if (is_wp_error($created)) {
+            return $created;
+        }
+
+        $newId = (int)$created['term_id'];
+        $trid  = (int)apply_filters(
+            'wpml_element_trid',
+            null,
+            self::termTaxonomyId($sourceId, $taxonomy),
+            'tax_'.$taxonomy
+        );
+
+        do_action('wpml_set_element_language_details', [
+            'element_id'           => (int)$created['term_taxonomy_id'],
+            'element_type'         => 'tax_'.$taxonomy,
+            'trid'                 => $trid,
+            'language_code'        => $language,
+            'source_language_code' => $sourceLanguage ?: null,
+        ]);
+
+        clean_term_cache($newId, $taxonomy);
+
+        if (function_exists('icl_cache_clear')) {
+            icl_cache_clear();
+        }
+
+        return $this->termTranslationResult($newId, $taxonomy, $language, true);
+    }
+
+    /**
+     * WPML's term APIs disagree about what an "element id" is, and getting it
+     * wrong fails silently — a lookup returns nothing, the caller concludes no
+     * translation exists and tries to create a duplicate:
+     *
+     *   wpml_object_id                    term_id,          bare taxonomy name
+     *   wpml_element_language_code        term_taxonomy_id, bare taxonomy name
+     *   wpml_element_trid                 term_taxonomy_id, tax_<taxonomy>
+     *   wpml_set_element_language_details term_taxonomy_id, tax_<taxonomy>
+     *
+     * icl_translations.element_id holds the term_taxonomy_id for terms, so
+     * everything except wpml_object_id needs the conversion below.
+     */
+    private static function termTaxonomyId(int $termId, string $taxonomy): int {
+        $term = self::rawTerm($termId, $taxonomy);
+
+        return $term ? (int)$term->term_taxonomy_id : 0; // phpcs:ignore Zend.NamingConventions.ValidVariableName
+    }
+
+    /**
+     * Resolves a term's translation in a language.
+     *
+     * wpml_object_id alone isn't enough: it returns null for any taxonomy not
+     * set to "translatable" in WPML's settings, even when icl_translations
+     * already holds a perfectly good translation group for it. Treating that
+     * null as "no translation exists" makes the caller try to create one and
+     * hit a duplicate-slug error, so the translation group is read directly
+     * as a fallback.
+     */
+    public static function findTranslatedTermId(int $sourceId, string $taxonomy, string $language): int {
+        $viaApi = (int)apply_filters('wpml_object_id', $sourceId, $taxonomy, false, $language);
+
+        if ($viaApi && $viaApi !== $sourceId) {
+            return $viaApi;
+        }
+
+        global $wpdb;
+
+        $sourceTtid = self::termTaxonomyId($sourceId, $taxonomy);
+
+        if (!$sourceTtid) {
+            return 0;
+        }
+
+        $table = $wpdb->prefix.'icl_translations';
+        $ttid  = (int)$wpdb->get_var($wpdb->prepare(
+            "SELECT target.element_id
+                FROM {$table} AS source
+                JOIN {$table} AS target
+                    ON target.trid = source.trid
+                    AND target.element_type = source.element_type
+                WHERE source.element_id = %d
+                    AND source.element_type = %s
+                    AND target.language_code = %s
+                    AND target.element_id IS NOT NULL",
+            $sourceTtid,
+            'tax_'.$taxonomy,
+            $language
+        ));
+
+        if (!$ttid) {
+            return 0;
+        }
+
+        return (int)$wpdb->get_var($wpdb->prepare(
+            "SELECT term_id FROM {$wpdb->term_taxonomy} WHERE term_taxonomy_id = %d",
+            $ttid
+        ));
+    }
+
+    private static function termLanguage(int $termId, string $taxonomy): string {
+        return (string)apply_filters('wpml_element_language_code', null, [
+            'element_id'   => self::termTaxonomyId($termId, $taxonomy),
+            'element_type' => $taxonomy,
+        ]);
+    }
+
+    /**
+     * @param \WP_Term $source
+     * @return int|WP_Error
+     */
+    private function resolveTranslatedTermParent($source, string $taxonomy, string $language) {
+        if (!$source->parent) {
+            return 0;
+        }
+
+        $translatedParent = self::findTranslatedTermId((int)$source->parent, $taxonomy, $language);
+
+        if (!$translatedParent || $translatedParent === (int)$source->parent) {
+            return new WP_Error(
+                'missing_parent_translation',
+                "Parent term {$source->parent} has no '{$language}' translation. Translate it first."
+            );
+        }
+
+        return $translatedParent;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function termTranslationResult(int $termId, string $taxonomy, string $language, bool $created): array {
+        $term = self::rawTerm($termId, $taxonomy);
+
+        return [
+            'term_id'   => $termId,
+            'taxonomy'  => $taxonomy,
+            'language'  => $language,
+            'name'      => $term->name,
+            'slug'      => $term->slug,
+            'parent_id' => (int)$term->parent,
+            'created'   => $created,
+            'url'       => self::termUrlInLanguage($termId, $taxonomy, $language),
+        ];
+    }
+
+    /**
+     * Reads a term straight from the terms tables, bypassing get_term().
+     *
+     * WPML's "adjust ids" feature rewrites get_term() results to the current
+     * language — asking for the ru term from an et request context silently
+     * returns the et term — so any code that must see the exact term it asked
+     * for (translation detection, reporting a translation's own name/slug)
+     * has to go around it.
+     */
+    public static function rawTerm(int $termId, string $taxonomy): ?object {
+        global $wpdb;
+
+        return $wpdb->get_row($wpdb->prepare(
+            "SELECT t.term_id, tt.term_taxonomy_id, t.name, t.slug, tt.description, tt.parent, tt.count
+                FROM {$wpdb->terms} AS t
+                JOIN {$wpdb->term_taxonomy} AS tt ON tt.term_id = t.term_id
+                WHERE t.term_id = %d AND tt.taxonomy = %s",
+            $termId,
+            $taxonomy
+        )) ?: null;
+    }
+
+    /**
+     * get_term_link() resolves through get_term(), so it needs the right
+     * language context for the same auto-adjust reason as rawTerm().
+     */
+    private static function termUrlInLanguage(int $termId, string $taxonomy, string $language): string {
+        $previousLanguage = Wpml::getCurrentLanguage();
+        Wpml::switchLanguage($language);
+
+        $link = get_term_link($termId, $taxonomy);
+
+        if ($previousLanguage) {
+            Wpml::switchLanguage($previousLanguage);
+        }
+
+        return is_wp_error($link) ? '' : (string)$link;
     }
 
     private function validateTranslationRequest($source, int $sourceId, string $language, string $status) {

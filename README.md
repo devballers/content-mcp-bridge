@@ -1,9 +1,34 @@
 # Content MCP Bridge
 
-Exposes WordPress content-editing abilities (posts, media, ACF fields, Rank
-Math SEO, WPML translations, Gravity Forms entries) to an MCP client such as
-Claude, scoped to one WordPress user, a chosen set of post types, and
-whichever integrations you enable.
+Exposes WordPress content-editing abilities (posts, media, taxonomy terms, ACF
+fields, Rank Math SEO, WPML post/term/menu/string translations, Gravity Forms
+entries) to an MCP client such as Claude, scoped to one WordPress user, a
+chosen set of post types, and whichever integrations you enable.
+
+## Translation abilities
+
+With the **WPML** integration enabled:
+
+- `get-post-translations` / `create-post-translation` — post and page translations
+- `get-term-translations` / `create-term-translation` — taxonomy term
+  translations (categories, and custom taxonomies like `destination`). Parent
+  terms are resolved to their translated counterpart so hierarchy is preserved,
+  and re-running updates the existing translation rather than duplicating it.
+- `list-terms` with `with_translations: true` — every term in a taxonomy plus
+  its per-language translation status, to find what still needs translating
+- `translate-menu` — navigation menu translation
+
+With the **WPML String Translation** integration enabled (needs the separate
+WPML String Translation plugin, which stores strings in `icl_strings` rather
+than in posts):
+
+- `list-string-contexts` — the string contexts/domains on the site with counts
+- `list-strings` — strings with their original value and per-language
+  translation status, filterable by context, free-text search and status
+  (`untranslated`, `translated`, `needs_update`)
+- `translate-string` — saves a translation for one string in one language,
+  through WPML's own `icl_add_string_translation()` so caches and status
+  bookkeeping stay correct
 
 ## Requirements
 

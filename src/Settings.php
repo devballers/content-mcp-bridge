@@ -7,11 +7,12 @@ class Settings {
     public const KEY_PATTERN = '/^[A-Za-z0-9-]{32,}$/';
 
     public const INTEGRATIONS = [
-        'wpml'              => 'WPML (translations & menu translation)',
-        'rank_math'         => 'Rank Math SEO',
-        'acf_fields'        => 'ACF post fields',
-        'acf_site_settings' => 'ACF site settings options page',
-        'gravity_forms'     => 'Gravity Forms (read entries)',
+        'wpml'                    => 'WPML (post, term & menu translation)',
+        'wpml_string_translation' => 'WPML String Translation (theme & plugin strings)',
+        'rank_math'               => 'Rank Math SEO',
+        'acf_fields'              => 'ACF post fields',
+        'acf_site_settings'       => 'ACF site settings options page',
+        'gravity_forms'           => 'Gravity Forms (read entries)',
     ];
 
     public function __construct() {
@@ -75,12 +76,13 @@ class Settings {
 
     public static function isIntegrationDetected(string $integration): bool {
         return match ($integration) {
-            'wpml'              => has_filter('wpml_object_id') !== false,
-            'rank_math'         => class_exists('RankMath'),
-            'acf_fields'        => function_exists('get_fields'),
-            'acf_site_settings' => function_exists('acf_add_options_page'),
-            'gravity_forms'     => class_exists('GFAPI'),
-            default             => false,
+            'wpml'                    => has_filter('wpml_object_id') !== false,
+            'wpml_string_translation' => has_filter('wpml_object_id') !== false && function_exists('icl_add_string_translation'),
+            'rank_math'               => class_exists('RankMath'),
+            'acf_fields'              => function_exists('get_fields'),
+            'acf_site_settings'       => function_exists('acf_add_options_page'),
+            'gravity_forms'           => class_exists('GFAPI'),
+            default                   => false,
         };
     }
 

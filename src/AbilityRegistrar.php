@@ -10,6 +10,7 @@ use ContentMcpBridge\Abilities\PostFields;
 use ContentMcpBridge\Abilities\Posts;
 use ContentMcpBridge\Abilities\Seo;
 use ContentMcpBridge\Abilities\SiteSettings;
+use ContentMcpBridge\Abilities\Strings;
 use ContentMcpBridge\Abilities\Taxonomies;
 use ContentMcpBridge\Abilities\Translations;
 
@@ -51,6 +52,10 @@ class AbilityRegistrar {
         if (!empty($enabled['wpml'])) {
             $this->register(new Menus(), $readOnly);
             $this->register(new Translations(), $readOnly);
+        }
+
+        if (!empty($enabled['wpml_string_translation'])) {
+            $this->register(new Strings(), $readOnly);
         }
 
         if (!empty($enabled['gravity_forms'])) {

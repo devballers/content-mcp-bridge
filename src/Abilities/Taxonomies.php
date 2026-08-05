@@ -134,22 +134,26 @@ class Taxonomies implements AbilityGroup {
     private function registerListTerms(): void {
         wp_register_ability('content-mcp-bridge/list-terms', [
             'label'               => 'List terms',
-            'description'         => 'Lists terms of a taxonomy, optionally filtered by WPML language or search term.',
+            'description'         => 'Lists terms of a taxonomy, optionally filtered by WPML language or search term. Set with_translations to also get each term\'s description and its translation status per active language.',
             'category'            => 'content-mcp-bridge',
             'input_schema'        => [
                 'type'                 => 'object',
                 'properties'           => [
-                    'taxonomy' => [
+                    'taxonomy'          => [
                         'type'        => 'string',
                         'description' => 'Taxonomy slug, e.g. category, product-category.',
                     ],
-                    'language' => [
+                    'language'          => [
                         'type'        => 'string',
                         'description' => 'WPML language code, e.g. en, et. Omit for the default language.',
                     ],
-                    'search'   => [
+                    'search'            => [
                         'type'        => 'string',
                         'description' => 'Free-text search over term names.',
+                    ],
+                    'with_translations' => [
+                        'type'        => 'boolean',
+                        'description' => 'Include the term description and a per-language translation map. Default false.',
                     ],
                 ],
                 'required'             => ['taxonomy'],
@@ -163,11 +167,17 @@ class Taxonomies implements AbilityGroup {
                         'items' => [
                             'type'       => 'object',
                             'properties' => [
-                                'id'        => ['type' => 'integer'],
-                                'name'      => ['type' => 'string'],
-                                'slug'      => ['type' => 'string'],
-                                'parent_id' => ['type' => 'integer'],
-                                'count'     => ['type' => 'integer'],
+                                'id'           => ['type' => 'integer'],
+                                'name'         => ['type' => 'string'],
+                                'slug'         => ['type' => 'string'],
+                                'parent_id'    => ['type' => 'integer'],
+                                'count'        => ['type' => 'integer'],
+                                'description'  => ['type' => 'string'],
+                                'language'     => ['type' => 'string'],
+                                'translations' => [
+                                    'type'  => 'object',
+                                    'items' => ['type' => 'object'],
+                                ],
                             ],
                         ],
                     ],
@@ -324,19 +334,54 @@ class Taxonomies implements AbilityGroup {
             return $terms;
         }
 
-        $result = [];
+        $withTranslations = !empty($input['with_translations']) && Wpml::isEnabled();
+        $activeLanguages  = $withTranslations ? Wpml::getAllActiveLanguages() : [];
+        $result           = [];
 
         foreach ($terms as $term) {
-            $result[] = [
-                'id'        => (int)$term->term_id, // phpcs:ignore Zend.NamingConventions.ValidVariableName
+            $termId = (int)$term->term_id; // phpcs:ignore Zend.NamingConventions.ValidVariableName
+            $entry  = [
+                'id'        => $termId,
                 'name'      => $term->name,
                 'slug'      => $term->slug,
                 'parent_id' => (int)$term->parent,
                 'count'     => (int)$term->count,
             ];
+
+            if ($withTranslations) {
+                $entry['description']  = (string)$term->description;
+                $entry['language']     = (string)apply_filters('wpml_element_language_code', null, [
+                    'element_id'   => $termId,
+                    'element_type' => 'tax_'.$taxonomyObject->name,
+                ]);
+                $entry['translations'] = $this->translationMap($termId, $taxonomyObject->name, $activeLanguages);
+            }
+
+            $result[] = $entry;
         }
 
         return ['terms' => $result];
+    }
+
+    /**
+     * @param array<string, mixed> $activeLanguages
+     * @return array<string, array<string, mixed>>
+     */
+    private function translationMap(int $termId, string $taxonomy, array $activeLanguages): array {
+        $map = [];
+
+        foreach (array_keys($activeLanguages) as $code) {
+            $translatedId   = Translations::findTranslatedTermId($termId, $taxonomy, $code);
+            $translatedTerm = $translatedId ? Translations::rawTerm($translatedId, $taxonomy) : null;
+
+            $map[$code] = [
+                'term_id' => $translatedTerm ? $translatedId : null,
+                'status'  => $translatedTerm ? 'translated' : 'missing',
+                'name'    => $translatedTerm ? $translatedTerm->name : '',
+            ];
+        }
+
+        return $map;
     }
 
     public function createTerm(array $input) {

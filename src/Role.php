@@ -81,6 +81,10 @@ class Role {
             $caps[] = 'gravity_forms_view_entries';
         }
 
+        if (!empty($settings['integrations']['wpml_string_translation'])) {
+            $caps[] = 'wpml_manage_string_translation';
+        }
+
         $caps = array_merge($caps, self::thirdPartyCapabilities());
 
         return array_values(array_unique(array_filter($caps)));
