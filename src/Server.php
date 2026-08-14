@@ -58,14 +58,23 @@ class Server {
     }
 
     /**
-     * Reads CONTENT_MCP_BRIDGE_KEY from whichever mechanism a project uses
-     * to configure it — a wp-config.php constant, the $_ENV superglobal
-     * (e.g. via vlucas/phpdotenv) or a plain putenv()/host-panel env var,
-     * which only shows up via getenv() and never touches $_ENV. The
-     * constant wins when both are set, being the most explicit of the
-     * three.
+     * Reads the secret key from whichever mechanism a project uses to
+     * configure it. On multisite, a CONTENT_MCP_BRIDGE_KEYS array constant
+     * mapping blog ID => key gives each site its own secret; a site without
+     * an entry falls back to the shared sources below. Those are, in order:
+     * a CONTENT_MCP_BRIDGE_KEY wp-config.php constant, the $_ENV
+     * superglobal (e.g. via vlucas/phpdotenv) or a plain putenv()/host-panel
+     * env var, which only shows up via getenv() and never touches $_ENV.
      */
     public static function currentKey(): string {
+        if (defined('CONTENT_MCP_BRIDGE_KEYS') && is_array(constant('CONTENT_MCP_BRIDGE_KEYS'))) {
+            $perSite = (string)(    constant('CONTENT_MCP_BRIDGE_KEYS')[get_current_blog_id()] ?? ''    );
+
+            if ($perSite !== '') {
+                return $perSite;
+            }
+        }
+
         if (defined('CONTENT_MCP_BRIDGE_KEY') && constant('CONTENT_MCP_BRIDGE_KEY') !== '') {
             return (string)constant('CONTENT_MCP_BRIDGE_KEY');
         }

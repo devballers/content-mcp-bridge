@@ -296,6 +296,13 @@ class Strings implements AbilityGroup {
             $params[] = $like;
         }
 
+        $statusFilter = (string)(    $input['status'] ?? 'all'    );
+        $statusWhere  = $this->statusCondition($statusFilter, $languages, $params);
+
+        if ($statusWhere) {
+            $where[] = $statusWhere;
+        }
+
         $whereSql = implode(' AND ', $where);
         $countSql = "SELECT COUNT(*) FROM {$stringsTable} s WHERE {$whereSql}";
         $rowsSql  = "SELECT s.id, s.context, s.name, s.value, s.language
@@ -311,8 +318,7 @@ class Strings implements AbilityGroup {
             return (int)$row->id;
         }, $rows));
 
-        $statusFilter = (string)(    $input['status'] ?? 'all'    );
-        $strings      = [];
+        $strings = [];
 
         foreach ($rows as $row) {
             $stringId = (int)$row->id;
@@ -327,10 +333,6 @@ class Strings implements AbilityGroup {
                     'translation' => $value,
                     'status'      => self::STATUS_LABELS[$status] ?? 'unknown',
                 ];
-            }
-
-            if (!$this->matchesStatusFilter($map, $statusFilter)) {
-                continue;
             }
 
             $strings[] = [
@@ -458,33 +460,68 @@ class Strings implements AbilityGroup {
     }
 
     /**
-     * A string matches when any of the requested languages is in the wanted
-     * state — so filtering "untranslated" across all languages surfaces
-     * everything with at least one gap, which is what you want to work through.
+     * Builds the status filter as a SQL condition so it applies BEFORE
+     * LIMIT/OFFSET. Filtering the fetched page in PHP instead would make the
+     * filter lie: with the default ordering (oldest ids first), untranslated
+     * strings past the first page would simply never appear in any page, and
+     * `total` would count unfiltered rows.
      *
-     * @param array<string, array<string, string>> $translations
+     * A string matches when any of the requested languages is in the wanted
+     * state — filtering "untranslated" across all languages surfaces
+     * everything with at least one gap, which is what you work through.
+     *
+     * @param string[] $languages
+     * @param array<int, string|int> $params Appended to in matching order.
      */
-    private function matchesStatusFilter(array $translations, string $filter): bool {
-        if ($filter === '' || $filter === 'all') {
-            return true;
+    private function statusCondition(string $filter, array $languages, array &$params): string {
+        if ($filter === '' || $filter === 'all' || !$languages) {
+            return '';
         }
 
-        foreach ($translations as $entry) {
-            $isTranslated = $entry['translation'] !== '' && $entry['status'] === 'complete';
+        global $wpdb;
 
-            $matches = match ($filter) {
-                'untranslated' => !$isTranslated && $entry['status'] !== 'needs update',
-                'translated'   => $isTranslated,
-                'needs_update' => $entry['status'] === 'needs update',
-                default        => true,
-            };
+        $table    = $wpdb->prefix.'icl_string_translations';
+        $complete = self::STATUS_COMPLETE;
+        $needs    = self::STATUS_NEEDS_UPDATE;
+        $perLang  = [];
 
-            if ($matches) {
-                return true;
+        foreach ($languages as $code) {
+            switch ($filter) {
+                case 'untranslated':
+                    // No complete translation and not merely stale either —
+                    // and never counting the string's own original language
+                    // as an untranslated gap.
+                    $perLang[] = "(s.language <> %s AND NOT EXISTS (
+                        SELECT 1 FROM {$table} t
+                        WHERE t.string_id = s.id AND t.language = %s
+                            AND ((t.status = {$complete} AND t.value IS NOT NULL AND TRIM(t.value) <> '') OR t.status = {$needs})
+                    ))";
+                    $params[]  = $code;
+                    $params[]  = $code;
+                    break;
+
+                case 'translated':
+                    $perLang[] = "(s.language <> %s AND EXISTS (
+                        SELECT 1 FROM {$table} t
+                        WHERE t.string_id = s.id AND t.language = %s
+                            AND t.status = {$complete} AND t.value IS NOT NULL AND TRIM(t.value) <> ''
+                    ))";
+                    $params[]  = $code;
+                    $params[]  = $code;
+                    break;
+
+                case 'needs_update':
+                    $perLang[] = "(s.language <> %s AND EXISTS (
+                        SELECT 1 FROM {$table} t
+                        WHERE t.string_id = s.id AND t.language = %s AND t.status = {$needs}
+                    ))";
+                    $params[]  = $code;
+                    $params[]  = $code;
+                    break;
             }
         }
 
-        return false;
+        return $perLang ? '('.implode(' OR ', $perLang).')' : '';
     }
 
     private static function unavailable(): WP_Error {
