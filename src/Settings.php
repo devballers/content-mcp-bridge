@@ -13,6 +13,7 @@ class Settings {
         'acf_fields'              => 'ACF post fields',
         'acf_site_settings'       => 'ACF site settings options page',
         'gravity_forms'           => 'Gravity Forms (forms & entries)',
+        'elementor'               => 'Elementor (page text content)',
     ];
 
     public function __construct() {
@@ -82,6 +83,7 @@ class Settings {
             'acf_fields'              => function_exists('get_fields'),
             'acf_site_settings'       => function_exists('acf_add_options_page'),
             'gravity_forms'           => class_exists('GFAPI'),
+            'elementor'               => defined('ELEMENTOR_VERSION'),
             default                   => false,
         };
     }

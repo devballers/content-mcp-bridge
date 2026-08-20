@@ -3,6 +3,7 @@ namespace ContentMcpBridge;
 
 use ContentMcpBridge\Abilities\AbilityGroup;
 use ContentMcpBridge\Abilities\Diagnostics;
+use ContentMcpBridge\Abilities\Elementor;
 use ContentMcpBridge\Abilities\GravityForms;
 use ContentMcpBridge\Abilities\Media;
 use ContentMcpBridge\Abilities\Menus;
@@ -60,6 +61,10 @@ class AbilityRegistrar {
 
         if (!empty($enabled['gravity_forms'])) {
             $this->register(new GravityForms(), $readOnly);
+        }
+
+        if (!empty($enabled['elementor'])) {
+            $this->register(new Elementor(), $readOnly);
         }
     }
 
