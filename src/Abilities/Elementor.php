@@ -56,6 +56,26 @@ class Elementor implements AbilityGroup {
         'after_text',
     ];
 
+    /**
+     * Settings holding a list of rows rather than a single value: icon
+     * lists, tabs, slides, accordion items. Each row is an array of
+     * settings in its own right, so the text inside them is addressed with
+     * a row index in the middle of the path (`a1b2c3d.icon_list.0.text`).
+     *
+     * The index is positional and therefore less stable than an element id
+     * — reordering the rows in Elementor reorders these paths too — so a
+     * write re-reads the tree and callers should re-read before editing
+     * after any structural change.
+     */
+    private const REPEATER_KEYS = [
+        'icon_list',
+        'tabs',
+        'slides',
+        'accordion_items',
+        'price_list',
+        'list_items',
+    ];
+
     public function registerReadOnly(): void {
         $this->registerGetElementorContent();
     }
@@ -67,7 +87,7 @@ class Elementor implements AbilityGroup {
     private function registerGetElementorContent(): void {
         wp_register_ability('content-mcp-bridge/get-elementor-content', [
             'label'               => 'Get Elementor content',
-            'description'         => 'Lists the editable text nodes of an Elementor page, each with a stable path and its current value. Layout, styling and non-text settings are omitted. Always call this before update-elementor-text to see the available paths.',
+            'description'         => 'Lists the editable text nodes of an Elementor page, each with a path and its current value, including rows inside repeating settings such as icon lists, tabs and slides. Layout, styling and non-text settings are omitted. Always call this before update-elementor-text to see the available paths.',
             'category'            => 'content-mcp-bridge',
             'input_schema'        => [
                 'type'                 => 'object',
@@ -131,7 +151,7 @@ class Elementor implements AbilityGroup {
                     ],
                     'path'    => [
                         'type'        => 'string',
-                        'description' => 'Node path as returned by get-elementor-content, e.g. "4a1b2c3d.title". The first segment is Elementor\'s element id, the second the setting name.',
+                        'description' => 'Node path as returned by get-elementor-content, e.g. "4a1b2c3d.title", or "4a1b2c3d.icon_list.0.text" for a row inside a repeating setting such as an icon list, tabs or slides. Row indexes are positional, so re-read get-elementor-content after any reordering.',
                     ],
                     'value'   => [
                         'type'        => 'string',
@@ -215,12 +235,30 @@ class Elementor implements AbilityGroup {
         }
 
         $segments = explode('.', $path);
+        $repeater = null;
+        $index    = null;
 
-        if (count($segments) !== 2 || $segments[0] === '' || $segments[1] === '') {
-            return new WP_Error('invalid_path', "Path '{$path}' is not in the expected 'element_id.setting' form. Check it against get-elementor-content output.");
+        if (count($segments) === 2) {
+            [$elementId, $setting] = $segments;
+        } elseif (count($segments) === 4) {
+            [$elementId, $repeater, $rawIndex, $setting] = $segments;
+
+            if (!in_array($repeater, self::REPEATER_KEYS, true)) {
+                return new WP_Error('unsupported_setting', "'{$repeater}' is not an editable repeater setting. Only the paths that get-elementor-content reports can be written.");
+            }
+
+            if (!ctype_digit($rawIndex)) {
+                return new WP_Error('invalid_path', "Row index '{$rawIndex}' in path '{$path}' is not a number. Check the path against get-elementor-content output.");
+            }
+
+            $index = (int)$rawIndex;
+        } else {
+            return new WP_Error('invalid_path', "Path '{$path}' is not in the expected 'element_id.setting' or 'element_id.repeater.row.setting' form. Check it against get-elementor-content output.");
         }
 
-        [$elementId, $setting] = $segments;
+        if ($elementId === '' || $setting === '') {
+            return new WP_Error('invalid_path', "Path '{$path}' has an empty segment. Check it against get-elementor-content output.");
+        }
 
         if (!in_array($setting, self::TEXT_KEYS, true)) {
             return new WP_Error('unsupported_setting', "Setting '{$setting}' is not an editable text setting. Only the settings that get-elementor-content reports can be written.");
@@ -235,14 +273,14 @@ class Elementor implements AbilityGroup {
         // Preserve the node's own markup convention: a value that was HTML
         // stays HTML, a plain-text one is escaped, so a text edit can never
         // introduce markup into a node that never had any.
-        $existing = $this->findValue($tree, $elementId, $setting);
+        $existing = $this->findValue($tree, $elementId, $setting, $repeater, $index);
 
         if ($existing === null) {
             return new WP_Error('unknown_node', "No text node found at '{$path}' on post {$postId}. Check the path against get-elementor-content output.");
         }
 
         $stored  = $this->isHtml($setting) ? wp_kses_post($value) : sanitize_textarea_field($value);
-        $applied = $this->replace($tree, $elementId, $setting, $stored);
+        $applied = $this->replace($tree, $elementId, $setting, $stored, $repeater, $index);
 
         if (!$applied) {
             return new WP_Error('update_failed', "Could not update '{$path}' on post {$postId}.");
@@ -361,6 +399,36 @@ class Elementor implements AbilityGroup {
                         'is_html' => $this->isHtml($key),
                     ];
                 }
+
+                foreach (self::REPEATER_KEYS as $repeater) {
+                    $rows = $settings[$repeater] ?? null;
+
+                    if (!is_array($rows)) {
+                        continue;
+                    }
+
+                    foreach (array_values($rows) as $index => $row) {
+                        if (!is_array($row)) {
+                            continue;
+                        }
+
+                        foreach (self::TEXT_KEYS as $key) {
+                            $value = $row[$key] ?? null;
+
+                            if (!is_string($value) || trim($value) === '') {
+                                continue;
+                            }
+
+                            $nodes[] = [
+                                'path'    => $id.'.'.$repeater.'.'.$index.'.'.$key,
+                                'widget'  => (string)(    $element['widgetType'] ?? $element['elType'] ?? ''    ),
+                                'setting' => $key,
+                                'value'   => $value,
+                                'is_html' => $this->isHtml($key),
+                            ];
+                        }
+                    }
+                }
             }
 
             if (!empty($element['elements']) && is_array($element['elements'])) {
@@ -372,20 +440,38 @@ class Elementor implements AbilityGroup {
     /**
      * @param array<int, mixed> $elements
      */
-    private function findValue(array $elements, string $elementId, string $setting): ?string {
+    private function findValue(array $elements, string $elementId, string $setting, ?string $repeater = null, ?int $index = null): ?string {
         foreach ($elements as $element) {
             if (!is_array($element)) {
                 continue;
             }
 
             if ((string)(    $element['id'] ?? ''    ) === $elementId) {
+                if ($repeater !== null) {
+                    $rows = $element['settings'][$repeater] ?? null;
+
+                    if (!is_array($rows)) {
+                        return null;
+                    }
+
+                    $row = array_values($rows)[$index] ?? null;
+
+                    if (!is_array($row)) {
+                        return null;
+                    }
+
+                    $value = $row[$setting] ?? null;
+
+                    return is_string($value) ? $value : null;
+                }
+
                 $value = $element['settings'][$setting] ?? null;
 
                 return is_string($value) ? $value : null;
             }
 
             if (!empty($element['elements']) && is_array($element['elements'])) {
-                $found = $this->findValue($element['elements'], $elementId, $setting);
+                $found = $this->findValue($element['elements'], $elementId, $setting, $repeater, $index);
 
                 if ($found !== null) {
                     return $found;
@@ -403,13 +489,39 @@ class Elementor implements AbilityGroup {
      *
      * @param array<int, mixed> $elements
      */
-    private function replace(array &$elements, string $elementId, string $setting, string $value): bool {
+    private function replace(array &$elements, string $elementId, string $setting, string $value, ?string $repeater = null, ?int $index = null): bool {
         foreach ($elements as &$element) {
             if (!is_array($element)) {
                 continue;
             }
 
             if ((string)(    $element['id'] ?? ''    ) === $elementId) {
+                if ($repeater !== null) {
+                    if (!isset($element['settings'][$repeater]) || !is_array($element['settings'][$repeater])) {
+                        return false;
+                    }
+
+                    // Rows are addressed by position, matching what
+                    // get-elementor-content reported, but written back
+                    // under their real key so a non-sequential array
+                    // keeps its original keys.
+                    $keys   = array_keys($element['settings'][$repeater]);
+                    $rowKey = $keys[$index] ?? null;
+
+                    if ($rowKey === null || !is_array($element['settings'][$repeater][$rowKey])) {
+                        return false;
+                    }
+
+                    if (!isset($element['settings'][$repeater][$rowKey][$setting])
+                        || !is_string($element['settings'][$repeater][$rowKey][$setting])) {
+                        return false;
+                    }
+
+                    $element['settings'][$repeater][$rowKey][$setting] = $value;
+
+                    return true;
+                }
+
                 if (!isset($element['settings'][$setting]) || !is_string($element['settings'][$setting])) {
                     return false;
                 }
@@ -420,7 +532,7 @@ class Elementor implements AbilityGroup {
             }
 
             if (!empty($element['elements']) && is_array($element['elements'])) {
-                if ($this->replace($element['elements'], $elementId, $setting, $value)) {
+                if ($this->replace($element['elements'], $elementId, $setting, $value, $repeater, $index)) {
                     return true;
                 }
             }
