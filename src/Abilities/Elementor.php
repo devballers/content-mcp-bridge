@@ -89,6 +89,18 @@ class Elementor implements AbilityGroup {
         'testimonial_list',
     ];
 
+    /**
+     * Settings that are listed for reading but refused for writing. The
+     * HTML widget exists to hold exactly what wp_kses_post strips —
+     * analytics snippets, embeds, data attributes — so sanitising a write
+     * would quietly gut it, while writing it unsanitised would let anyone
+     * driving the MCP connection run arbitrary JavaScript on the site.
+     * Neither is acceptable, so the value stays visible and untouched.
+     */
+    private const READ_ONLY_KEYS = [
+        'html',
+    ];
+
     public function registerReadOnly(): void {
         $this->registerGetElementorContent();
     }
@@ -100,7 +112,7 @@ class Elementor implements AbilityGroup {
     private function registerGetElementorContent(): void {
         wp_register_ability('content-mcp-bridge/get-elementor-content', [
             'label'               => 'Get Elementor content',
-            'description'         => 'Lists the editable text nodes of an Elementor page, each with a path and its current value, including rows inside repeating settings such as icon lists, tabs and slides. Layout, styling and non-text settings are omitted. Always call this before update-elementor-text to see the available paths.',
+            'description'         => 'Lists the editable text nodes of an Elementor page, each with a path and its current value, including rows inside repeating settings such as icon lists, tabs and slides. Layout, styling and non-text settings are omitted. Nodes with editable false can be read but not written. Always call this before update-elementor-text to see the available paths.',
             'category'            => 'content-mcp-bridge',
             'input_schema'        => [
                 'type'                 => 'object',
@@ -127,6 +139,7 @@ class Elementor implements AbilityGroup {
                                 'setting'    => ['type' => 'string'],
                                 'value'      => ['type' => 'string'],
                                 'is_html'    => ['type' => 'boolean'],
+                                'editable'   => ['type' => 'boolean'],
                             ],
                         ],
                     ],
@@ -277,6 +290,13 @@ class Elementor implements AbilityGroup {
             return new WP_Error('unsupported_setting', "Setting '{$setting}' is not an editable text setting. Only the settings that get-elementor-content reports can be written.");
         }
 
+        if (in_array($setting, self::READ_ONLY_KEYS, true)) {
+            return new WP_Error(
+                'read_only_setting',
+                "Setting '{$setting}' can be read but not written: an HTML widget may hold scripts or embeds that sanitising would strip and that writing unsanitised would make a security hole. Edit it in Elementor directly."
+            );
+        }
+
         $tree = $this->readTree($postId);
 
         if (is_wp_error($tree)) {
@@ -408,8 +428,9 @@ class Elementor implements AbilityGroup {
                         'path'    => $id.'.'.$key,
                         'widget'  => (string)(    $element['widgetType'] ?? $element['elType'] ?? ''    ),
                         'setting' => $key,
-                        'value'   => $value,
-                        'is_html' => $this->isHtml($key),
+                        'value'    => $value,
+                        'is_html'  => $this->isHtml($key),
+                        'editable' => !in_array($key, self::READ_ONLY_KEYS, true),
                     ];
                 }
 
@@ -436,8 +457,9 @@ class Elementor implements AbilityGroup {
                                 'path'    => $id.'.'.$repeater.'.'.$index.'.'.$key,
                                 'widget'  => (string)(    $element['widgetType'] ?? $element['elType'] ?? ''    ),
                                 'setting' => $key,
-                                'value'   => $value,
-                                'is_html' => $this->isHtml($key),
+                                'value'    => $value,
+                                'is_html'  => $this->isHtml($key),
+                                'editable' => !in_array($key, self::READ_ONLY_KEYS, true),
                             ];
                         }
                     }
