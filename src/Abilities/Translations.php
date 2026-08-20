@@ -82,7 +82,7 @@ class Translations implements AbilityGroup {
     private function registerCreatePostTranslation(): void {
         wp_register_ability('content-mcp-bridge/create-post-translation', [
             'label'               => 'Create post translation',
-            'description'         => 'Creates a WPML translation of a post, linked to the original translation group.',
+            'description'         => 'Creates a WPML translation of a post, linked to the original translation group. With backfill_meta true it also repairs an existing translation whose custom fields are missing, instead of failing.',
             'category'            => 'content-mcp-bridge',
             'input_schema'        => [
                 'type'                 => 'object',
@@ -121,6 +121,10 @@ class Translations implements AbilityGroup {
                         'type'        => 'boolean',
                         'description' => 'Copy custom fields (ACF sections) from the source. Default true.',
                     ],
+                    'backfill_meta'  => [
+                        'type'        => 'boolean',
+                        'description' => 'When a translation already exists, refill its custom fields from the source instead of failing with translation_exists. Only meta is written; the existing title, body and status are left alone. Default false.',
+                    ],
                 ],
                 'required'             => [
                     'source_post_id',
@@ -137,6 +141,7 @@ class Translations implements AbilityGroup {
                     'title'       => ['type' => 'string'],
                     'url'         => ['type' => 'string'],
                     'copied_meta' => ['type' => 'integer'],
+                    'backfilled'  => ['type' => 'boolean'],
                 ],
             ],
             'execute_callback'    => AuditLog::wrap('content-mcp-bridge/create-post-translation', [$this, 'createPostTranslation']),
@@ -354,10 +359,22 @@ class Translations implements AbilityGroup {
         $status   = $input['status'] ?? 'draft';
         $source   = get_post($sourceId);
 
-        $validationError = $this->validateTranslationRequest($source, $sourceId, $language, $status);
+        $backfill        = !empty($input['backfill_meta']);
+        $validationError = $this->validateTranslationRequest($source, $sourceId, $language, $status, $backfill);
 
         if (is_wp_error($validationError)) {
             return $validationError;
+        }
+
+        // Repairing an existing translation is a different job from creating
+        // one: the translated title, body and status are somebody's work and
+        // must survive, so only the custom fields are rewritten.
+        if ($backfill) {
+            $existingId = (int)apply_filters('wpml_object_id', $sourceId, $source->post_type, false, $language); // phpcs:ignore Zend.NamingConventions.ValidVariableName
+
+            if ($existingId && $existingId !== $sourceId && get_post($existingId)) {
+                return $this->backfillTranslationMeta($sourceId, $existingId, $language);
+            }
         }
 
         $elementType      = 'post_'.$source->post_type; // phpcs:ignore Zend.NamingConventions.ValidVariableName
@@ -414,6 +431,60 @@ class Translations implements AbilityGroup {
             'title'       => $created->post_title, // phpcs:ignore Zend.NamingConventions.ValidVariableName
             'url'         => (string)get_permalink($newId),
             'copied_meta' => $copiedMeta,
+            'backfilled'  => false,
+        ];
+    }
+
+    /**
+     * Refills an existing translation's custom fields from its source.
+     *
+     * Existing values are replaced rather than appended to: copySourceMeta
+     * uses add_post_meta, which on a post that already has the key would
+     * leave two values behind and make ACF read the stale one.
+     *
+     * @return array<string, mixed>
+     */
+    private function backfillTranslationMeta(int $sourceId, int $targetId, string $language): array {
+        $skipKeys = [
+            '_edit_lock',
+            '_edit_last',
+            '_wp_old_slug',
+            '_wp_trash_meta_status',
+            '_wp_trash_meta_time',
+            '_wp_desired_post_slug',
+        ];
+
+        $written = 0;
+
+        foreach (get_post_meta($sourceId) as $key => $values) {
+            if (in_array($key, $skipKeys, true)) {
+                continue;
+            }
+
+            delete_post_meta($targetId, $key);
+
+            foreach ($values as $value) {
+                add_post_meta($targetId, $key, maybe_unserialize($value));
+                $written++;
+            }
+        }
+
+        clean_post_cache($targetId);
+
+        if (function_exists('icl_cache_clear')) {
+            icl_cache_clear();
+        }
+
+        $target = get_post($targetId);
+
+        return [
+            'id'          => $targetId,
+            'language'    => $language,
+            'status'      => $target->post_status, // phpcs:ignore Zend.NamingConventions.ValidVariableName
+            'title'       => $target->post_title, // phpcs:ignore Zend.NamingConventions.ValidVariableName
+            'url'         => (string)get_permalink($targetId),
+            'copied_meta' => $written,
+            'backfilled'  => true,
         ];
     }
 
@@ -759,7 +830,7 @@ class Translations implements AbilityGroup {
         return is_wp_error($link) ? '' : (string)$link;
     }
 
-    private function validateTranslationRequest($source, int $sourceId, string $language, string $status) {
+    private function validateTranslationRequest($source, int $sourceId, string $language, string $status, bool $allowExisting = false) {
         if (!Wpml::isEnabled()) {
             return new WP_Error('wpml_not_active', 'WPML is not active on this site.');
         }
@@ -789,8 +860,11 @@ class Translations implements AbilityGroup {
 
         $existing = (int)apply_filters('wpml_object_id', $sourceId, $source->post_type, false, $language); // phpcs:ignore Zend.NamingConventions.ValidVariableName
 
-        if ($existing && $existing !== $sourceId && get_post($existing)) {
-            return new WP_Error('translation_exists', "A '{$language}' translation already exists: post {$existing}.");
+        if ($existing && $existing !== $sourceId && get_post($existing) && !$allowExisting) {
+            return new WP_Error(
+                'translation_exists',
+                "A '{$language}' translation already exists: post {$existing}. Pass backfill_meta true to refill its custom fields instead."
+            );
         }
 
         $postTypeObject = get_post_type_object($source->post_type); // phpcs:ignore Zend.NamingConventions.ValidVariableName
