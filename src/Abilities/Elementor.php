@@ -48,6 +48,17 @@ class Elementor implements AbilityGroup {
         'testimonial_content',
         'testimonial_name',
         'testimonial_job',
+        // The testimonial and review carousels name the same three fields
+        // differently inside their slides than the single-testimonial
+        // widget does, so both spellings have to be listed.
+        'content',
+        'name',
+        'job',
+        'quote',
+        'author',
+        'heading',
+        'subtitle',
+        'description',
         'alert_title',
         'alert_description',
         'before_text',
@@ -74,6 +85,8 @@ class Elementor implements AbilityGroup {
         'accordion_items',
         'price_list',
         'list_items',
+        'carousel_slides',
+        'testimonial_list',
     ];
 
     public function registerReadOnly(): void {
