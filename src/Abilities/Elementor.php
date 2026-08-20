@@ -562,6 +562,10 @@ class Elementor implements AbilityGroup {
     private function isHtml(string $setting): bool {
         return in_array($setting, [
             'editor', 'html', 'testimonial_content', 'alert_description', 'tab_content',
+            // The carousel spellings of the rich-text fields above: their
+            // stored value is editor markup just the same, so stripping it
+            // to plain text would flatten every paragraph in a quote.
+            'content', 'quote', 'description',
         ], true);
     }
 }
