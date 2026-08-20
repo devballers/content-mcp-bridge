@@ -12,7 +12,7 @@ class Settings {
         'rank_math'               => 'Rank Math SEO',
         'acf_fields'              => 'ACF post fields',
         'acf_site_settings'       => 'ACF site settings options page',
-        'gravity_forms'           => 'Gravity Forms (read entries)',
+        'gravity_forms'           => 'Gravity Forms (forms & entries)',
     ];
 
     public function __construct() {

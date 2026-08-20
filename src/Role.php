@@ -78,7 +78,9 @@ class Role {
         }
 
         if (!empty($settings['integrations']['gravity_forms'])) {
-            $caps[] = 'gravity_forms_view_entries';
+            $caps[] = 'gravityforms_view_entries';
+            $caps[] = 'gravityforms_edit_forms';
+            $caps[] = 'gravityforms_create_form';
         }
 
         if (!empty($settings['integrations']['wpml_string_translation'])) {
