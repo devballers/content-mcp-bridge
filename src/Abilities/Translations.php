@@ -2,7 +2,8 @@
 namespace ContentMcpBridge\Abilities;
 
 use ContentMcpBridge\AuditLog;
-use ContentMcpBridge\Integrations\Wpml;
+use ContentMcpBridge\Integrations\Multilingual;
+use ContentMcpBridge\Integrations\Polylang;
 use ContentMcpBridge\Settings;
 use WP_Error;
 
@@ -20,7 +21,7 @@ class Translations implements AbilityGroup {
     private function registerGetPostTranslations(): void {
         wp_register_ability('content-mcp-bridge/get-post-translations', [
             'label'               => 'Get post translations',
-            'description'         => 'Returns all WPML language versions of a post with status, title and URL.',
+            'description'         => 'Returns all language versions of a post (WPML or Polylang) with status, title and URL.',
             'category'            => 'content-mcp-bridge',
             'input_schema'        => [
                 'type'                 => 'object',
@@ -82,7 +83,7 @@ class Translations implements AbilityGroup {
     private function registerCreatePostTranslation(): void {
         wp_register_ability('content-mcp-bridge/create-post-translation', [
             'label'               => 'Create post translation',
-            'description'         => 'Creates a WPML translation of a post, linked to the original translation group. With backfill_meta true it also repairs an existing translation whose custom fields are missing, instead of failing.',
+            'description'         => 'Creates a translation of a post (WPML or Polylang), linked to the original translation group. With backfill_meta true it also repairs an existing translation whose custom fields are missing, instead of failing.',
             'category'            => 'content-mcp-bridge',
             'input_schema'        => [
                 'type'                 => 'object',
@@ -93,11 +94,15 @@ class Translations implements AbilityGroup {
                     ],
                     'language'       => [
                         'type'        => 'string',
-                        'description' => 'Target WPML language code, e.g. fi, sv, et.',
+                        'description' => 'Target language code, e.g. fi, sv, et.',
                     ],
                     'title'          => [
                         'type'        => 'string',
                         'description' => 'Translated title. Defaults to the source title.',
+                    ],
+                    'slug'           => [
+                        'type'        => 'string',
+                        'description' => 'Translated URL slug. Generated from the translated title when omitted. If already taken, WordPress appends a suffix; check the returned slug.',
                     ],
                     'content'        => [
                         'type'        => 'string',
@@ -139,6 +144,7 @@ class Translations implements AbilityGroup {
                     'language'    => ['type' => 'string'],
                     'status'      => ['type' => 'string'],
                     'title'       => ['type' => 'string'],
+                    'slug'        => ['type' => 'string'],
                     'url'         => ['type' => 'string'],
                     'copied_meta' => ['type' => 'integer'],
                     'backfilled'  => ['type' => 'boolean'],
@@ -165,7 +171,7 @@ class Translations implements AbilityGroup {
     private function registerGetTermTranslations(): void {
         wp_register_ability('content-mcp-bridge/get-term-translations', [
             'label'               => 'Get term translations',
-            'description'         => 'Returns all WPML language versions of a taxonomy term with name, slug, description and parent.',
+            'description'         => 'Returns all language versions of a taxonomy term (WPML or Polylang) with name, slug, description and parent.',
             'category'            => 'content-mcp-bridge',
             'input_schema'        => [
                 'type'                 => 'object',
@@ -234,7 +240,7 @@ class Translations implements AbilityGroup {
     private function registerCreateTermTranslation(): void {
         wp_register_ability('content-mcp-bridge/create-term-translation', [
             'label'               => 'Create term translation',
-            'description'         => 'Creates a WPML translation of a taxonomy term, linked to the original translation group. The translated parent is resolved automatically so hierarchy is preserved. Safe to re-run: an existing translation is updated instead of duplicated.',
+            'description'         => 'Creates a translation of a taxonomy term (WPML or Polylang), linked to the original translation group. The translated parent is resolved automatically so hierarchy is preserved. Safe to re-run: an existing translation is updated instead of duplicated.',
             'category'            => 'content-mcp-bridge',
             'input_schema'        => [
                 'type'                 => 'object',
@@ -249,7 +255,7 @@ class Translations implements AbilityGroup {
                     ],
                     'language'    => [
                         'type'        => 'string',
-                        'description' => 'Target WPML language code, e.g. ru, fi, et.',
+                        'description' => 'Target language code, e.g. ru, fi, et.',
                     ],
                     'name'        => [
                         'type'        => 'string',
@@ -303,8 +309,8 @@ class Translations implements AbilityGroup {
     }
 
     public function getPostTranslations(array $input) {
-        if (!Wpml::isEnabled()) {
-            return new WP_Error('wpml_not_active', 'WPML is not active on this site.');
+        if (!Multilingual::isEnabled()) {
+            return new WP_Error('multilingual_not_active', 'No multilingual plugin (WPML or Polylang) is active on this site.');
         }
 
         $post = PostGuard::resolve(isset($input['post_id']) ? (int)$input['post_id'] : 0, 'edit_post');
@@ -317,9 +323,9 @@ class Translations implements AbilityGroup {
         $postType     = $post->post_type; // phpcs:ignore Zend.NamingConventions.ValidVariableName
         $translations = [];
 
-        foreach (Wpml::getAllActiveLanguages() as $code => $language) {
+        foreach (Multilingual::getAllActiveLanguages() as $code => $language) {
             $languageName   = $language['native_name'] ?? $language['display_name'] ?? $code;
-            $translatedId   = (int)apply_filters('wpml_object_id', $postId, $postType, false, $code);
+            $translatedId   = Multilingual::translatedPostId($postId, $postType, $code);
             $translatedPost = $translatedId ? get_post($translatedId) : null;
 
             if ($translatedPost) {
@@ -348,7 +354,7 @@ class Translations implements AbilityGroup {
         return [
             'post_id'           => $postId,
             'post_type'         => $postType,
-            'original_language' => (string)Wpml::getPostLanguage($postId, $postType),
+            'original_language' => (string)Multilingual::getPostLanguage($postId, $postType),
             'translations'      => $translations,
         ];
     }
@@ -370,7 +376,7 @@ class Translations implements AbilityGroup {
         // one: the translated title, body and status are somebody's work and
         // must survive, so only the custom fields are rewritten.
         if ($backfill) {
-            $existingId = (int)apply_filters('wpml_object_id', $sourceId, $source->post_type, false, $language); // phpcs:ignore Zend.NamingConventions.ValidVariableName
+            $existingId = Multilingual::translatedPostId($sourceId, $source->post_type, $language); // phpcs:ignore Zend.NamingConventions.ValidVariableName
 
             if ($existingId && $existingId !== $sourceId && get_post($existingId)) {
                 return $this->backfillTranslationMeta($sourceId, $existingId, $language);
@@ -378,7 +384,7 @@ class Translations implements AbilityGroup {
         }
 
         $elementType      = 'post_'.$source->post_type; // phpcs:ignore Zend.NamingConventions.ValidVariableName
-        $sourceLanguage   = (string)Wpml::getPostLanguage($sourceId, $source->post_type); // phpcs:ignore Zend.NamingConventions.ValidVariableName
+        $sourceLanguage   = (string)Multilingual::getPostLanguage($sourceId, $source->post_type); // phpcs:ignore Zend.NamingConventions.ValidVariableName
         $translatedParent = $this->resolveTranslatedParent($source, $language);
 
         if (!$translatedParent && $source->post_parent && in_array($status, ['publish', 'private'], true)) { // phpcs:ignore Zend.NamingConventions.ValidVariableName
@@ -392,6 +398,7 @@ class Translations implements AbilityGroup {
         $newId = wp_insert_post([
             'post_type'    => $source->post_type, // phpcs:ignore Zend.NamingConventions.ValidVariableName
             'post_title'   => $input['title'] ?? $source->post_title, // phpcs:ignore Zend.NamingConventions.ValidVariableName
+            'post_name'    => isset($input['slug']) ? sanitize_title((string)$input['slug']) : '',
             'post_content' => $input['content'] ?? $source->post_content, // phpcs:ignore Zend.NamingConventions.ValidVariableName
             'post_excerpt' => $input['excerpt'] ?? $source->post_excerpt, // phpcs:ignore Zend.NamingConventions.ValidVariableName
             'post_status'  => $status,
@@ -410,10 +417,15 @@ class Translations implements AbilityGroup {
             $copiedMeta = $this->copySourceMeta($sourceId, $newId);
         }
 
-        $linked = $this->linkTranslation($newId, $elementType, $trid, $language, $sourceLanguage);
+        if (Multilingual::isPolylang()) {
+            Polylang::setPostLanguage($newId, $language);
+            Polylang::linkPostTranslations($sourceId, $newId, $language);
+        } else {
+            $linked = $this->linkTranslation($newId, $elementType, $trid, $language, $sourceLanguage);
 
-        if (is_wp_error($linked)) {
-            return $linked;
+            if (is_wp_error($linked)) {
+                return $linked;
+            }
         }
 
         clean_post_cache($newId);
@@ -429,6 +441,7 @@ class Translations implements AbilityGroup {
             'language'    => $language,
             'status'      => $created->post_status, // phpcs:ignore Zend.NamingConventions.ValidVariableName
             'title'       => $created->post_title, // phpcs:ignore Zend.NamingConventions.ValidVariableName
+            'slug'        => $created->post_name, // phpcs:ignore Zend.NamingConventions.ValidVariableName
             'url'         => (string)get_permalink($newId),
             'copied_meta' => $copiedMeta,
             'backfilled'  => false,
@@ -482,6 +495,7 @@ class Translations implements AbilityGroup {
             'language'    => $language,
             'status'      => $target->post_status, // phpcs:ignore Zend.NamingConventions.ValidVariableName
             'title'       => $target->post_title, // phpcs:ignore Zend.NamingConventions.ValidVariableName
+            'slug'        => $target->post_name, // phpcs:ignore Zend.NamingConventions.ValidVariableName
             'url'         => (string)get_permalink($targetId),
             'copied_meta' => $written,
             'backfilled'  => true,
@@ -489,8 +503,8 @@ class Translations implements AbilityGroup {
     }
 
     public function getTermTranslations(array $input) {
-        if (!Wpml::isEnabled()) {
-            return new WP_Error('wpml_not_active', 'WPML is not active on this site.');
+        if (!Multilingual::isEnabled()) {
+            return new WP_Error('multilingual_not_active', 'No multilingual plugin (WPML or Polylang) is active on this site.');
         }
 
         $taxonomyObject = Taxonomies::resolve((string)(    $input['taxonomy'] ?? ''    ));
@@ -509,7 +523,7 @@ class Translations implements AbilityGroup {
 
         $translations = [];
 
-        foreach (Wpml::getAllActiveLanguages() as $code => $language) {
+        foreach (Multilingual::getAllActiveLanguages() as $code => $language) {
             $languageName   = $language['native_name'] ?? $language['display_name'] ?? $code;
             $translatedId   = self::findTranslatedTermId($termId, $taxonomy, $code);
             $translatedTerm = $translatedId ? self::rawTerm($translatedId, $taxonomy) : null;
@@ -552,8 +566,8 @@ class Translations implements AbilityGroup {
     }
 
     public function createTermTranslation(array $input) {
-        if (!Wpml::isEnabled()) {
-            return new WP_Error('wpml_not_active', 'WPML is not active on this site.');
+        if (!Multilingual::isEnabled()) {
+            return new WP_Error('multilingual_not_active', 'No multilingual plugin (WPML or Polylang) is active on this site.');
         }
 
         $taxonomyObject = Taxonomies::resolve((string)(    $input['taxonomy'] ?? ''    ));
@@ -575,7 +589,7 @@ class Translations implements AbilityGroup {
             return new WP_Error('term_not_found', "Term {$sourceId} was not found in taxonomy '{$taxonomy}'.");
         }
 
-        if (!array_key_exists($language, Wpml::getAllActiveLanguages())) {
+        if (!array_key_exists($language, Multilingual::getAllActiveLanguages())) {
             return new WP_Error('invalid_language', "Language '{$language}' is not active on this site.");
         }
 
@@ -607,8 +621,8 @@ class Translations implements AbilityGroup {
         // the term, so updating term 1402 (ru) from an et request context
         // would silently operate on its et counterpart instead — and creating
         // would collide with the ru slug that "wasn't there".
-        $previousLanguage = Wpml::getCurrentLanguage();
-        Wpml::switchLanguage($language);
+        $previousLanguage = Multilingual::getCurrentLanguage();
+        Multilingual::switchLanguage($language);
 
         if ($existing) {
             $args = [
@@ -626,7 +640,7 @@ class Translations implements AbilityGroup {
             $updated = wp_update_term($existingId, $taxonomy, $args);
 
             if ($previousLanguage) {
-                Wpml::switchLanguage($previousLanguage);
+                Multilingual::switchLanguage($previousLanguage);
             }
 
             if (is_wp_error($updated)) {
@@ -636,6 +650,13 @@ class Translations implements AbilityGroup {
             return $this->termTranslationResult((int)$updated['term_id'], $taxonomy, $language, false);
         }
 
+        // Polylang appends the language code to colliding slugs in its own
+        // admin screens; that filter is absent here, so an omitted slug that
+        // would collide with the source's gets the same treatment up front.
+        if ($slug === '' && Multilingual::isPolylang() && get_term_by('slug', sanitize_title($name), $taxonomy)) {
+            $slug = sanitize_title($name).'-'.$language;
+        }
+
         $created = wp_insert_term($name, $taxonomy, [
             'slug'        => $slug,
             'description' => $description,
@@ -643,7 +664,7 @@ class Translations implements AbilityGroup {
         ]);
 
         if ($previousLanguage) {
-            Wpml::switchLanguage($previousLanguage);
+            Multilingual::switchLanguage($previousLanguage);
         }
 
         if (is_wp_error($created)) {
@@ -651,20 +672,26 @@ class Translations implements AbilityGroup {
         }
 
         $newId = (int)$created['term_id'];
-        $trid  = (int)apply_filters(
-            'wpml_element_trid',
-            null,
-            self::termTaxonomyId($sourceId, $taxonomy),
-            'tax_'.$taxonomy
-        );
 
-        do_action('wpml_set_element_language_details', [
-            'element_id'           => (int)$created['term_taxonomy_id'],
-            'element_type'         => 'tax_'.$taxonomy,
-            'trid'                 => $trid,
-            'language_code'        => $language,
-            'source_language_code' => $sourceLanguage ?: null,
-        ]);
+        if (Multilingual::isPolylang()) {
+            Polylang::setTermLanguage($newId, $language);
+            Polylang::linkTermTranslations($sourceId, $newId, $language);
+        } else {
+            $trid = (int)apply_filters(
+                'wpml_element_trid',
+                null,
+                self::termTaxonomyId($sourceId, $taxonomy),
+                'tax_'.$taxonomy
+            );
+
+            do_action('wpml_set_element_language_details', [
+                'element_id'           => (int)$created['term_taxonomy_id'],
+                'element_type'         => 'tax_'.$taxonomy,
+                'trid'                 => $trid,
+                'language_code'        => $language,
+                'source_language_code' => $sourceLanguage ?: null,
+            ]);
+        }
 
         clean_term_cache($newId, $taxonomy);
 
@@ -705,6 +732,10 @@ class Translations implements AbilityGroup {
      * as a fallback.
      */
     public static function findTranslatedTermId(int $sourceId, string $taxonomy, string $language): int {
+        if (Multilingual::isPolylang()) {
+            return Polylang::translatedTermId($sourceId, $language);
+        }
+
         $viaApi = (int)apply_filters('wpml_object_id', $sourceId, $taxonomy, false, $language);
 
         if ($viaApi && $viaApi !== $sourceId) {
@@ -746,6 +777,10 @@ class Translations implements AbilityGroup {
     }
 
     private static function termLanguage(int $termId, string $taxonomy): string {
+        if (Multilingual::isPolylang()) {
+            return Polylang::getTermLanguage($termId);
+        }
+
         return (string)apply_filters('wpml_element_language_code', null, [
             'element_id'   => self::termTaxonomyId($termId, $taxonomy),
             'element_type' => $taxonomy,
@@ -818,21 +853,21 @@ class Translations implements AbilityGroup {
      * language context for the same auto-adjust reason as rawTerm().
      */
     private static function termUrlInLanguage(int $termId, string $taxonomy, string $language): string {
-        $previousLanguage = Wpml::getCurrentLanguage();
-        Wpml::switchLanguage($language);
+        $previousLanguage = Multilingual::getCurrentLanguage();
+        Multilingual::switchLanguage($language);
 
         $link = get_term_link($termId, $taxonomy);
 
         if ($previousLanguage) {
-            Wpml::switchLanguage($previousLanguage);
+            Multilingual::switchLanguage($previousLanguage);
         }
 
         return is_wp_error($link) ? '' : (string)$link;
     }
 
     private function validateTranslationRequest($source, int $sourceId, string $language, string $status, bool $allowExisting = false) {
-        if (!Wpml::isEnabled()) {
-            return new WP_Error('wpml_not_active', 'WPML is not active on this site.');
+        if (!Multilingual::isEnabled()) {
+            return new WP_Error('multilingual_not_active', 'No multilingual plugin (WPML or Polylang) is active on this site.');
         }
 
         if (!$source) {
@@ -850,15 +885,15 @@ class Translations implements AbilityGroup {
             );
         }
 
-        if (!array_key_exists($language, Wpml::getAllActiveLanguages())) {
+        if (!array_key_exists($language, Multilingual::getAllActiveLanguages())) {
             return new WP_Error('invalid_language', "Language '{$language}' is not active on this site.");
         }
 
-        if ($language === (string)Wpml::getPostLanguage($sourceId, $source->post_type)) { // phpcs:ignore Zend.NamingConventions.ValidVariableName
+        if ($language === (string)Multilingual::getPostLanguage($sourceId, $source->post_type)) { // phpcs:ignore Zend.NamingConventions.ValidVariableName
             return new WP_Error('same_language', "Post {$sourceId} is already in language '{$language}'.");
         }
 
-        $existing = (int)apply_filters('wpml_object_id', $sourceId, $source->post_type, false, $language); // phpcs:ignore Zend.NamingConventions.ValidVariableName
+        $existing = Multilingual::translatedPostId($sourceId, $source->post_type, $language); // phpcs:ignore Zend.NamingConventions.ValidVariableName
 
         if ($existing && $existing !== $sourceId && get_post($existing) && !$allowExisting) {
             return new WP_Error(
@@ -885,7 +920,7 @@ class Translations implements AbilityGroup {
             return 0;
         }
 
-        return (int)apply_filters('wpml_object_id', $source->post_parent, $source->post_type, false, $language); // phpcs:ignore Zend.NamingConventions.ValidVariableName
+        return Multilingual::translatedPostId((int)$source->post_parent, $source->post_type, $language); // phpcs:ignore Zend.NamingConventions.ValidVariableName
     }
 
     private function copySourceMeta(int $sourceId, int $targetId): int {

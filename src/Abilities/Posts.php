@@ -2,7 +2,7 @@
 namespace ContentMcpBridge\Abilities;
 
 use ContentMcpBridge\AuditLog;
-use ContentMcpBridge\Integrations\Wpml;
+use ContentMcpBridge\Integrations\Multilingual;
 use ContentMcpBridge\Settings;
 use WP_Error;
 use WP_Query;
@@ -26,7 +26,7 @@ class Posts implements AbilityGroup
         wp_register_ability(
             'content-mcp-bridge/list-posts', [
             'label'               => 'List posts',
-            'description'         => 'Lists posts of a post type, filtered by WPML language, status or search term.',
+            'description'         => 'Lists posts of a post type, filtered by language (WPML or Polylang), status or search term.',
             'category'            => 'content-mcp-bridge',
             'input_schema'        => [
                 'type'                 => 'object',
@@ -37,7 +37,7 @@ class Posts implements AbilityGroup
                     ],
                     'language'  => [
                         'type'        => 'string',
-                        'description' => 'WPML language code, e.g. en, fi, sv. Omit for the default language.',
+                        'description' => 'Language code, e.g. en, fi, sv. Omit for the default language.',
                     ],
                     'status'    => [
                         'type'        => 'string',
@@ -103,7 +103,7 @@ class Posts implements AbilityGroup
         wp_register_ability(
             'content-mcp-bridge/get-post', [
             'label'               => 'Get post content',
-            'description'         => 'Returns a post for editing: title, body, excerpt, status, language, terms, meta.',
+            'description'         => 'Returns a post for editing: title, slug, body, excerpt, status, language, terms, meta.',
             'category'            => 'content-mcp-bridge',
             'input_schema'        => [
                 'type'                 => 'object',
@@ -128,6 +128,7 @@ class Posts implements AbilityGroup
                     'status'            => ['type' => 'string'],
                     'language'          => ['type' => 'string'],
                     'title'             => ['type' => 'string'],
+                    'slug'              => ['type' => 'string'],
                     'content'           => ['type' => 'string'],
                     'excerpt'           => ['type' => 'string'],
                     'url'               => ['type' => 'string'],
@@ -174,6 +175,10 @@ class Posts implements AbilityGroup
                         'type'        => 'string',
                         'description' => 'Post title.',
                     ],
+                    'slug'      => [
+                        'type'        => 'string',
+                        'description' => 'URL slug. Generated from the title when omitted. If already taken, WordPress appends a suffix; check the returned slug.',
+                    ],
                     'content'   => [
                         'type'        => 'string',
                         'description' => 'Post body (HTML allowed).',
@@ -194,7 +199,7 @@ class Posts implements AbilityGroup
                     ],
                     'language'  => [
                         'type'        => 'string',
-                        'description' => 'WPML language code, e.g. en, et. Omit for the default language.',
+                        'description' => 'Language code, e.g. en, et. Omit for the default language.',
                     ],
                     'parent_id' => [
                         'type'        => 'integer',
@@ -220,6 +225,7 @@ class Posts implements AbilityGroup
                     'status'   => ['type' => 'string'],
                     'language' => ['type' => 'string'],
                     'title'    => ['type' => 'string'],
+                    'slug'     => ['type' => 'string'],
                     'url'      => ['type' => 'string'],
                 ],
             ],
@@ -247,7 +253,7 @@ class Posts implements AbilityGroup
         wp_register_ability(
             'content-mcp-bridge/update-post', [
             'label'               => 'Update post',
-            'description'         => 'Updates title, body, excerpt, status, taxonomy terms or custom fields of a post by its ID.',
+            'description'         => 'Updates title, slug, body, excerpt, status, taxonomy terms or custom fields of a post by its ID.',
             'category'            => 'content-mcp-bridge',
             'input_schema'        => [
                 'type'                 => 'object',
@@ -259,6 +265,10 @@ class Posts implements AbilityGroup
                     'title'   => [
                         'type'        => 'string',
                         'description' => 'New post title.',
+                    ],
+                    'slug'    => [
+                        'type'        => 'string',
+                        'description' => 'New URL slug. Changing a published post\'s slug changes its URL — old links keep working through WordPress\'s old-slug redirect. If the slug is already taken, WordPress appends a suffix; check the returned slug.',
                     ],
                     'content' => [
                         'type'        => 'string',
@@ -298,6 +308,7 @@ class Posts implements AbilityGroup
                         'type'  => 'array',
                         'items' => ['type' => 'string'],
                     ],
+                    'slug'           => ['type' => 'string'],
                     'url'            => ['type' => 'string'],
                 ],
             ],
@@ -336,13 +347,13 @@ class Posts implements AbilityGroup
 
         $previousLanguage = '';
 
-        if ($language && Wpml::isEnabled()) {
-            if (!array_key_exists($language, Wpml::getAllActiveLanguages())) {
+        if ($language && Multilingual::isEnabled()) {
+            if (!array_key_exists($language, Multilingual::getAllActiveLanguages())) {
                 return new WP_Error('invalid_language', "Language '{$language}' is not active on this site.");
             }
 
-            $previousLanguage = Wpml::getCurrentLanguage();
-            Wpml::switchLanguage($language);
+            $previousLanguage = Multilingual::getCurrentLanguage();
+            Multilingual::switchLanguage($language);
         }
 
         $query = new WP_Query(
@@ -354,7 +365,7 @@ class Posts implements AbilityGroup
             'posts_per_page' => $perPage,
             'orderby'        => 'modified',
             'order'          => 'DESC',
-            ]
+            ] + Multilingual::languageQueryArgs($language)
         );
 
         $posts = [];
@@ -364,14 +375,14 @@ class Posts implements AbilityGroup
                 'id'           => $post->ID,
                 'title'        => $post->post_title, // phpcs:ignore Zend.NamingConventions.ValidVariableName
                 'status'       => $post->post_status, // phpcs:ignore Zend.NamingConventions.ValidVariableName
-                'language'     => (string)Wpml::getPostLanguage($post->ID, $post->post_type), // phpcs:ignore Zend.NamingConventions.ValidVariableName
+                'language'     => (string)Multilingual::getPostLanguage($post->ID, $post->post_type), // phpcs:ignore Zend.NamingConventions.ValidVariableName
                 'url'          => (string)get_permalink($post->ID),
                 'modified_gmt' => $post->post_modified_gmt, // phpcs:ignore Zend.NamingConventions.ValidVariableName
             ];
         }
 
         if ($previousLanguage) {
-            Wpml::switchLanguage($previousLanguage);
+            Multilingual::switchLanguage($previousLanguage);
         }
 
         return [
@@ -393,8 +404,9 @@ class Posts implements AbilityGroup
             'id'                => $post->ID,
             'type'              => $post->post_type, // phpcs:ignore Zend.NamingConventions.ValidVariableName
             'status'            => $post->post_status, // phpcs:ignore Zend.NamingConventions.ValidVariableName
-            'language'          => (string)Wpml::getPostLanguage($post->ID, $post->post_type), // phpcs:ignore Zend.NamingConventions.ValidVariableName
+            'language'          => (string)Multilingual::getPostLanguage($post->ID, $post->post_type), // phpcs:ignore Zend.NamingConventions.ValidVariableName
             'title'             => $post->post_title, // phpcs:ignore Zend.NamingConventions.ValidVariableName
+            'slug'              => $post->post_name, // phpcs:ignore Zend.NamingConventions.ValidVariableName
             'content'           => $post->post_content, // phpcs:ignore Zend.NamingConventions.ValidVariableName
             'excerpt'           => $post->post_excerpt, // phpcs:ignore Zend.NamingConventions.ValidVariableName
             'url'               => (string)get_permalink($post->ID),
@@ -458,9 +470,9 @@ class Posts implements AbilityGroup
     {
         $previousLanguage = '';
 
-        if ($language && Wpml::isEnabled()) {
-            $previousLanguage = Wpml::getCurrentLanguage();
-            Wpml::switchLanguage($language);
+        if ($language && Multilingual::isEnabled()) {
+            $previousLanguage = Multilingual::getCurrentLanguage();
+            Multilingual::switchLanguage($language);
         }
 
         $resolved = [];
@@ -514,7 +526,7 @@ class Posts implements AbilityGroup
         }
 
         if ($previousLanguage) {
-            Wpml::switchLanguage($previousLanguage);
+            Multilingual::switchLanguage($previousLanguage);
         }
 
         return $error ?? $resolved;
@@ -550,7 +562,7 @@ class Posts implements AbilityGroup
             return new WP_Error('cannot_publish', 'You are not allowed to publish posts of this type.');
         }
 
-        if ($language && Wpml::isEnabled() && !array_key_exists($language, Wpml::getAllActiveLanguages())) {
+        if ($language && Multilingual::isEnabled() && !array_key_exists($language, Multilingual::getAllActiveLanguages())) {
             return new WP_Error('invalid_language', "Language '{$language}' is not active on this site.");
         }
 
@@ -578,15 +590,16 @@ class Posts implements AbilityGroup
 
         $previousLanguage = '';
 
-        if ($language && Wpml::isEnabled()) {
-            $previousLanguage = Wpml::getCurrentLanguage();
-            Wpml::switchLanguage($language);
+        if ($language && Multilingual::isEnabled()) {
+            $previousLanguage = Multilingual::getCurrentLanguage();
+            Multilingual::switchLanguage($language);
         }
 
         $newId = wp_insert_post(
             [
             'post_type'    => $postType,
             'post_title'   => $title,
+            'post_name'    => isset($input['slug']) ? sanitize_title((string)$input['slug']) : '',
             'post_content' => $input['content'] ?? '',
             'post_excerpt' => $input['excerpt'] ?? '',
             'post_status'  => $status,
@@ -596,23 +609,15 @@ class Posts implements AbilityGroup
         );
 
         if ($previousLanguage) {
-            Wpml::switchLanguage($previousLanguage);
+            Multilingual::switchLanguage($previousLanguage);
         }
 
         if (is_wp_error($newId)) {
             return $newId;
         }
 
-        if ($language && Wpml::isEnabled()) {
-            do_action(
-                'wpml_set_element_language_details', [
-                'element_id'           => $newId,
-                'element_type'         => 'post_'.$postType,
-                'trid'                 => false,
-                'language_code'        => $language,
-                'source_language_code' => null,
-                ]
-            );
+        if ($language && Multilingual::isEnabled()) {
+            Multilingual::setNewPostLanguage($newId, $postType, $language);
         }
 
         if (!empty($input['meta']) && is_array($input['meta'])) {
@@ -651,8 +656,9 @@ class Posts implements AbilityGroup
             'id'       => $newId,
             'type'     => $created->post_type, // phpcs:ignore Zend.NamingConventions.ValidVariableName
             'status'   => $created->post_status, // phpcs:ignore Zend.NamingConventions.ValidVariableName
-            'language' => (string)Wpml::getPostLanguage($newId, $postType) ?: $language,
+            'language' => (string)Multilingual::getPostLanguage($newId, $postType) ?: $language,
             'title'    => $created->post_title, // phpcs:ignore Zend.NamingConventions.ValidVariableName
+            'slug'     => $created->post_name, // phpcs:ignore Zend.NamingConventions.ValidVariableName
             'url'      => (string)get_permalink($newId),
         ];
     }
@@ -682,6 +688,17 @@ class Posts implements AbilityGroup
         if (isset($input['title'])) {
             $postFields['post_title'] = $input['title'];
             $updatedFields[]          = 'title';
+        }
+
+        if (isset($input['slug'])) {
+            $slug = sanitize_title((string)$input['slug']);
+
+            if ($slug === '') {
+                return new WP_Error('invalid_parameter', 'slug cannot be empty.');
+            }
+
+            $postFields['post_name'] = $slug;
+            $updatedFields[]         = 'slug';
         }
 
         if (isset($input['content'])) {
@@ -724,7 +741,7 @@ class Posts implements AbilityGroup
         }
 
         if (!empty($input['terms']) && is_array($input['terms'])) {
-            $postLanguage  = (string)Wpml::getPostLanguage($postId, $post->post_type); // phpcs:ignore Zend.NamingConventions.ValidVariableName
+            $postLanguage  = (string)Multilingual::getPostLanguage($postId, $post->post_type); // phpcs:ignore Zend.NamingConventions.ValidVariableName
             $resolvedTerms = $this->resolveTermsInput($input['terms'], $post->post_type, $postLanguage); // phpcs:ignore Zend.NamingConventions.ValidVariableName
 
             if (is_wp_error($resolvedTerms)) {
@@ -751,6 +768,7 @@ class Posts implements AbilityGroup
         return [
             'id'             => $postId,
             'updated_fields' => $updatedFields,
+            'slug'           => (string)get_post_field('post_name', $postId),
             'url'            => (string)get_permalink($postId),
         ];
     }

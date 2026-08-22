@@ -2,7 +2,7 @@
 namespace ContentMcpBridge\Abilities;
 
 use ContentMcpBridge\AuditLog;
-use ContentMcpBridge\Integrations\Wpml;
+use ContentMcpBridge\Integrations\Multilingual;
 use WP_Error;
 use WP_Query;
 
@@ -37,7 +37,7 @@ class Media implements AbilityGroup {
                     ],
                     'language' => [
                         'type'        => 'string',
-                        'description' => 'WPML language code filter, e.g. en, fi, sv.',
+                        'description' => 'Language code filter, e.g. en, fi, sv.',
                     ],
                     'page'     => [
                         'type'        => 'integer',
@@ -120,7 +120,7 @@ class Media implements AbilityGroup {
                     ],
                     'language' => [
                         'type'        => 'string',
-                        'description' => 'WPML language of the new media item, e.g. en, fi, sv.',
+                        'description' => 'Language of the new media item, e.g. en, fi, sv.',
                     ],
                 ],
                 'required'             => ['url'],
@@ -210,7 +210,7 @@ class Media implements AbilityGroup {
                 'properties'           => [
                     'attachment_id' => [
                         'type'        => 'integer',
-                        'description' => 'Media item ID. WPML language versions of media have their own IDs.',
+                        'description' => 'Media item ID. Language versions of media have their own IDs.',
                     ],
                     'alt'           => [
                         'type'        => 'string',
@@ -354,13 +354,13 @@ class Media implements AbilityGroup {
         $language         = (string)(    $input['language'] ?? ''    );
         $previousLanguage = '';
 
-        if ($language && Wpml::isEnabled()) {
-            if (!array_key_exists($language, Wpml::getAllActiveLanguages())) {
+        if ($language && Multilingual::isEnabled()) {
+            if (!array_key_exists($language, Multilingual::getAllActiveLanguages())) {
                 return new WP_Error('invalid_language', "Language '{$language}' is not active on this site.");
             }
 
-            $previousLanguage = Wpml::getCurrentLanguage();
-            Wpml::switchLanguage($language);
+            $previousLanguage = Multilingual::getCurrentLanguage();
+            Multilingual::switchLanguage($language);
         }
 
         $query = new WP_Query([
@@ -372,7 +372,7 @@ class Media implements AbilityGroup {
             'posts_per_page' => $perPage,
             'orderby'        => 'date',
             'order'          => 'DESC',
-        ]);
+        ] + Multilingual::languageQueryArgs($language));
 
         $items = [];
 
@@ -383,13 +383,13 @@ class Media implements AbilityGroup {
                 'alt'      => (string)get_post_meta($attachment->ID, '_wp_attachment_image_alt', true),
                 'caption'  => $attachment->post_excerpt, // phpcs:ignore Zend.NamingConventions.ValidVariableName
                 'mime'     => $attachment->post_mime_type, // phpcs:ignore Zend.NamingConventions.ValidVariableName
-                'language' => (string)Wpml::getPostLanguage($attachment->ID, 'attachment'),
+                'language' => (string)Multilingual::getPostLanguage($attachment->ID, 'attachment'),
                 'url'      => (string)wp_get_attachment_url($attachment->ID),
             ];
         }
 
         if ($previousLanguage) {
-            Wpml::switchLanguage($previousLanguage);
+            Multilingual::switchLanguage($previousLanguage);
         }
 
         return [
@@ -407,7 +407,7 @@ class Media implements AbilityGroup {
             return new WP_Error('invalid_url', "The URL '{$url}' is not valid or not allowed.");
         }
 
-        if ($language && Wpml::isEnabled() && !array_key_exists($language, Wpml::getAllActiveLanguages())) {
+        if ($language && Multilingual::isEnabled() && !array_key_exists($language, Multilingual::getAllActiveLanguages())) {
             return new WP_Error('invalid_language', "Language '{$language}' is not active on this site.");
         }
 
@@ -452,13 +452,8 @@ class Media implements AbilityGroup {
             ]);
         }
 
-        if ($language && Wpml::isEnabled()) {
-            do_action('wpml_set_element_language_details', [
-                'element_id'    => $attachmentId,
-                'element_type'  => 'post_attachment',
-                'trid'          => false,
-                'language_code' => $language,
-            ]);
+        if ($language && Multilingual::isEnabled()) {
+            Multilingual::setNewPostLanguage($attachmentId, 'attachment', $language);
         }
 
         return [

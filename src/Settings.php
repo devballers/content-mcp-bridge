@@ -9,6 +9,7 @@ class Settings {
     public const INTEGRATIONS = [
         'wpml'                    => 'WPML (post, term & menu translation)',
         'wpml_string_translation' => 'WPML String Translation (theme & plugin strings)',
+        'polylang'                => 'Polylang (post, term & string translation)',
         'rank_math'               => 'Rank Math SEO',
         'acf_fields'              => 'ACF post fields',
         'acf_site_settings'       => 'ACF site settings options page',
@@ -77,8 +78,9 @@ class Settings {
 
     public static function isIntegrationDetected(string $integration): bool {
         return match ($integration) {
-            'wpml'                    => has_filter('wpml_object_id') !== false,
-            'wpml_string_translation' => has_filter('wpml_object_id') !== false && function_exists('icl_add_string_translation'),
+            'wpml'                    => Integrations\Wpml::isEnabled(),
+            'wpml_string_translation' => Integrations\Wpml::isEnabled() && function_exists('icl_add_string_translation'),
+            'polylang'                => function_exists('PLL') && function_exists('pll_get_post'),
             'rank_math'               => class_exists('RankMath'),
             'acf_fields'              => function_exists('get_fields'),
             'acf_site_settings'       => function_exists('acf_add_options_page'),

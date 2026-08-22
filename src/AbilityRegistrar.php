@@ -7,6 +7,7 @@ use ContentMcpBridge\Abilities\Elementor;
 use ContentMcpBridge\Abilities\GravityForms;
 use ContentMcpBridge\Abilities\Media;
 use ContentMcpBridge\Abilities\Menus;
+use ContentMcpBridge\Abilities\PolylangStrings;
 use ContentMcpBridge\Abilities\PostFields;
 use ContentMcpBridge\Abilities\Posts;
 use ContentMcpBridge\Abilities\Seo;
@@ -52,11 +53,18 @@ class AbilityRegistrar {
 
         if (!empty($enabled['wpml'])) {
             $this->register(new Menus(), $readOnly);
+        }
+
+        if (!empty($enabled['wpml']) || !empty($enabled['polylang'])) {
             $this->register(new Translations(), $readOnly);
         }
 
         if (!empty($enabled['wpml_string_translation'])) {
             $this->register(new Strings(), $readOnly);
+        }
+
+        if (!empty($enabled['polylang'])) {
+            $this->register(new PolylangStrings(), $readOnly);
         }
 
         if (!empty($enabled['gravity_forms'])) {

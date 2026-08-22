@@ -2,7 +2,7 @@
 namespace ContentMcpBridge\Abilities;
 
 use ContentMcpBridge\AuditLog;
-use ContentMcpBridge\Integrations\Wpml;
+use ContentMcpBridge\Integrations\Multilingual;
 use ContentMcpBridge\Settings;
 use WP_Error;
 use WP_Taxonomy;
@@ -134,7 +134,7 @@ class Taxonomies implements AbilityGroup {
     private function registerListTerms(): void {
         wp_register_ability('content-mcp-bridge/list-terms', [
             'label'               => 'List terms',
-            'description'         => 'Lists terms of a taxonomy, optionally filtered by WPML language or search term. Set with_translations to also get each term\'s description and its translation status per active language.',
+            'description'         => 'Lists terms of a taxonomy, optionally filtered by language (WPML or Polylang) or search term. Set with_translations to also get each term\'s description and its translation status per active language.',
             'category'            => 'content-mcp-bridge',
             'input_schema'        => [
                 'type'                 => 'object',
@@ -145,7 +145,7 @@ class Taxonomies implements AbilityGroup {
                     ],
                     'language'          => [
                         'type'        => 'string',
-                        'description' => 'WPML language code, e.g. en, et. Omit for the default language.',
+                        'description' => 'Language code, e.g. en, et. Omit for the default language.',
                     ],
                     'search'            => [
                         'type'        => 'string',
@@ -231,7 +231,7 @@ class Taxonomies implements AbilityGroup {
                     ],
                     'language'    => [
                         'type'        => 'string',
-                        'description' => 'WPML language code, e.g. en, et. Omit for the default language.',
+                        'description' => 'Language code, e.g. en, et. Omit for the default language.',
                     ],
                 ],
                 'required'             => ['taxonomy', 'name'],
@@ -311,13 +311,13 @@ class Taxonomies implements AbilityGroup {
         $language         = (string)(    $input['language'] ?? ''    );
         $previousLanguage = '';
 
-        if ($language && Wpml::isEnabled()) {
-            if (!array_key_exists($language, Wpml::getAllActiveLanguages())) {
+        if ($language && Multilingual::isEnabled()) {
+            if (!array_key_exists($language, Multilingual::getAllActiveLanguages())) {
                 return new WP_Error('invalid_language', "Language '{$language}' is not active on this site.");
             }
 
-            $previousLanguage = Wpml::getCurrentLanguage();
-            Wpml::switchLanguage($language);
+            $previousLanguage = Multilingual::getCurrentLanguage();
+            Multilingual::switchLanguage($language);
         }
 
         $terms = get_terms([
@@ -327,15 +327,23 @@ class Taxonomies implements AbilityGroup {
         ]);
 
         if ($previousLanguage) {
-            Wpml::switchLanguage($previousLanguage);
+            Multilingual::switchLanguage($previousLanguage);
         }
 
         if (is_wp_error($terms)) {
             return $terms;
         }
 
-        $withTranslations = !empty($input['with_translations']) && Wpml::isEnabled();
-        $activeLanguages  = $withTranslations ? Wpml::getAllActiveLanguages() : [];
+        // WPML constrained get_terms through the language switch above;
+        // Polylang did not, so its terms are filtered here instead.
+        if ($language && Multilingual::isEnabled()) {
+            $terms = array_values(array_filter($terms, static function ($term) use ($language): bool {
+                return Multilingual::termMatchesLanguage((int)$term->term_id, $language); // phpcs:ignore Zend.NamingConventions.ValidVariableName
+            }));
+        }
+
+        $withTranslations = !empty($input['with_translations']) && Multilingual::isEnabled();
+        $activeLanguages  = $withTranslations ? Multilingual::getAllActiveLanguages() : [];
         $result           = [];
 
         foreach ($terms as $term) {
@@ -350,10 +358,7 @@ class Taxonomies implements AbilityGroup {
 
             if ($withTranslations) {
                 $entry['description']  = (string)$term->description;
-                $entry['language']     = (string)apply_filters('wpml_element_language_code', null, [
-                    'element_id'   => $termId,
-                    'element_type' => 'tax_'.$taxonomyObject->name,
-                ]);
+                $entry['language']     = Multilingual::getTermLanguage($termId, $taxonomyObject->name);
                 $entry['translations'] = $this->translationMap($termId, $taxonomyObject->name, $activeLanguages);
             }
 
@@ -403,7 +408,7 @@ class Taxonomies implements AbilityGroup {
 
         $language = (string)(    $input['language'] ?? ''    );
 
-        if ($language && Wpml::isEnabled() && !array_key_exists($language, Wpml::getAllActiveLanguages())) {
+        if ($language && Multilingual::isEnabled() && !array_key_exists($language, Multilingual::getAllActiveLanguages())) {
             return new WP_Error('invalid_language', "Language '{$language}' is not active on this site.");
         }
 
@@ -423,9 +428,9 @@ class Taxonomies implements AbilityGroup {
 
         $previousLanguage = '';
 
-        if ($language && Wpml::isEnabled()) {
-            $previousLanguage = Wpml::getCurrentLanguage();
-            Wpml::switchLanguage($language);
+        if ($language && Multilingual::isEnabled()) {
+            $previousLanguage = Multilingual::getCurrentLanguage();
+            Multilingual::switchLanguage($language);
         }
 
         $created = wp_insert_term($name, $taxonomyObject->name, [
@@ -435,7 +440,7 @@ class Taxonomies implements AbilityGroup {
         ]);
 
         if ($previousLanguage) {
-            Wpml::switchLanguage($previousLanguage);
+            Multilingual::switchLanguage($previousLanguage);
         }
 
         if (is_wp_error($created)) {

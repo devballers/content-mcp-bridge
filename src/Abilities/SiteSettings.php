@@ -2,7 +2,7 @@
 namespace ContentMcpBridge\Abilities;
 
 use ContentMcpBridge\AuditLog;
-use ContentMcpBridge\Integrations\Wpml;
+use ContentMcpBridge\Integrations\Multilingual;
 use WP_Error;
 
 /**
@@ -44,7 +44,7 @@ class SiteSettings implements AbilityGroup {
                     ],
                     'language' => [
                         'type'        => 'string',
-                        'description' => 'WPML language code to read the settings in, e.g. en, fi. Omit for the default language.',
+                        'description' => 'Language code to read the settings in, e.g. en, fi. Omit for the default language.',
                     ],
                 ],
                 'additionalProperties' => false,
@@ -87,7 +87,7 @@ class SiteSettings implements AbilityGroup {
                     ],
                     'language' => [
                         'type'        => 'string',
-                        'description' => 'WPML language code whose settings to update, e.g. en, fi. Omit for the default language.',
+                        'description' => 'Language code whose settings to update, e.g. en, fi. Omit for the default language.',
                     ],
                 ],
                 'required'             => ['fields'],
@@ -206,23 +206,23 @@ class SiteSettings implements AbilityGroup {
      * @return string|WP_Error
      */
     private function switchToLanguage(string $language) {
-        if (!$language || !Wpml::isEnabled()) {
+        if (!$language || !Multilingual::isEnabled()) {
             return '';
         }
 
-        if (!array_key_exists($language, Wpml::getAllActiveLanguages())) {
+        if (!array_key_exists($language, Multilingual::getAllActiveLanguages())) {
             return new WP_Error('invalid_language', "Language '{$language}' is not active on this site.");
         }
 
-        $previousLanguage = Wpml::getCurrentLanguage();
-        Wpml::switchLanguage($language);
+        $previousLanguage = Multilingual::getCurrentLanguage();
+        Multilingual::switchLanguage($language);
 
         return $previousLanguage;
     }
 
     private function restoreLanguage(string $previousLanguage): void {
         if ($previousLanguage) {
-            Wpml::switchLanguage($previousLanguage);
+            Multilingual::switchLanguage($previousLanguage);
         }
     }
 }

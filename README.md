@@ -1,7 +1,8 @@
 # Content MCP Bridge
 
 Exposes WordPress content-editing abilities (posts, media, taxonomy terms, ACF
-fields, Rank Math SEO, WPML post/term/menu/string translations, Gravity Forms
+fields, Rank Math SEO, WPML or Polylang post/term/string translations (menus
+WPML-only), Gravity Forms
 entries) to an MCP client such as Claude, scoped to one WordPress user, a
 chosen set of post types, and whichever integrations you enable.
 
@@ -29,6 +30,15 @@ than in posts):
 - `translate-string` — saves a translation for one string in one language,
   through WPML's own `icl_add_string_translation()` so caches and status
   bookkeeping stay correct
+
+With the **Polylang** integration enabled, the same translation abilities are
+registered against Polylang's APIs instead: post and term translations link
+through `pll_save_post_translations()` / `pll_save_term_translations()`, and
+the string abilities read and write each language's `polylang_mo` store the
+way the Languages → Translations screen does. Polylang strings have no
+database id — `translate-string` identifies them by their original text.
+`translate-menu` stays WPML-only: Polylang handles menus per language through
+theme menu locations, so there is nothing to translate post-by-post.
 
 ## Requirements
 

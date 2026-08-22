@@ -2,6 +2,7 @@
 namespace ContentMcpBridge\Abilities;
 
 use ContentMcpBridge\AuditLog;
+use ContentMcpBridge\Integrations\Wpml;
 use WP_Error;
 
 /**
@@ -86,7 +87,7 @@ class Menus implements AbilityGroup {
      * @return array<string, mixed>|WP_Error
      */
     public function translateMenu(array $input) { // phpcs:ignore Generic.Metrics.CyclomaticComplexity
-        if (!has_filter('wpml_object_id')) {
+        if (!Wpml::isEnabled()) {
             return new WP_Error('wpml_missing', 'WPML is not active on this site.');
         }
 

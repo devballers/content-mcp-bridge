@@ -8,7 +8,10 @@ namespace ContentMcpBridge\Integrations;
  */
 class Wpml {
     public static function isEnabled(): bool {
-        return (bool)has_filter('wpml_object_id');
+        // has_filter('wpml_object_id') alone is not enough: Polylang ships a
+        // WPML compatibility layer registering the same filters, so a Polylang
+        // site would be mistaken for WPML and fatal on the null $sitepress.
+        return defined('ICL_SITEPRESS_VERSION') && !empty($GLOBALS['sitepress']);
     }
 
     public static function getDefaultLanguage(): string {
