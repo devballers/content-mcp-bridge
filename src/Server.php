@@ -113,7 +113,17 @@ class Server {
         return 'bridge-'.$key;
     }
 
-    public function registerServer(McpAdapter $adapter): void {
+    /**
+     * Plugins may bundle their own vendor-prefixed copy of the mcp-adapter
+     * library (e.g. Gravity Forms ships Gravity_Forms\...\WP\MCP\Core\McpAdapter)
+     * which fires the same mcp_adapter_init action with its prefixed adapter
+     * class, so only accept the instance from the real mcp-adapter plugin.
+     */
+    public function registerServer(object $adapter): void {
+        if (!$adapter instanceof McpAdapter) {
+            return;
+        }
+
         $key = self::currentKey();
 
         if (!self::urlForKey($key) || !class_exists(HttpTransport::class)) {
