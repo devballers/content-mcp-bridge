@@ -16,6 +16,7 @@ class Translations implements AbilityGroup {
     public function registerWrite(): void {
         $this->registerCreatePostTranslation();
         $this->registerCreateTermTranslation();
+        $this->registerLinkTermTranslations();
     }
 
     private function registerGetPostTranslations(): void {
@@ -502,6 +503,63 @@ class Translations implements AbilityGroup {
         ];
     }
 
+    private function registerLinkTermTranslations(): void {
+        wp_register_ability('content-mcp-bridge/link-term-translations', [
+            'label'               => 'Link term translations',
+            'description'         => 'Marks an existing term as the translation of another term (WPML or Polylang), without creating anything: the term in translation_id is assigned the given language and joined into term_id\'s translation group. Use it to merge two separately created terms into one group, or to fix a term stored under the wrong language. Fails if the group already has a different term in that language.',
+            'category'            => 'content-mcp-bridge',
+            'input_schema'        => [
+                'type'                 => 'object',
+                'properties'           => [
+                    'taxonomy'       => [
+                        'type'        => 'string',
+                        'description' => 'Taxonomy slug, e.g. category, destination.',
+                    ],
+                    'term_id'        => [
+                        'type'        => 'integer',
+                        'description' => 'ID of the term whose translation group is kept (typically the default-language original).',
+                    ],
+                    'translation_id' => [
+                        'type'        => 'integer',
+                        'description' => 'ID of the existing term to attach to that group as a translation.',
+                    ],
+                    'language'       => [
+                        'type'        => 'string',
+                        'description' => 'Language code the attached term represents, e.g. en, ru. Defaults to the language it currently has.',
+                    ],
+                ],
+                'required'             => ['taxonomy', 'term_id', 'translation_id'],
+                'additionalProperties' => false,
+            ],
+            'output_schema'       => [
+                'type'       => 'object',
+                'properties' => [
+                    'term_id'           => ['type' => 'integer'],
+                    'translation_id'    => ['type' => 'integer'],
+                    'language'          => ['type' => 'string'],
+                    'taxonomy'          => ['type' => 'string'],
+                    'original_language' => ['type' => 'string'],
+                    'translations'      => ['type' => 'object'],
+                ],
+            ],
+            'execute_callback'    => AuditLog::wrap('content-mcp-bridge/link-term-translations', [$this, 'linkTermTranslations']),
+            'permission_callback' => function (): bool {
+                return current_user_can('edit_posts');
+            },
+            'meta'                => [
+                'annotations' => [
+                    'readonly'    => false,
+                    'destructive' => false,
+                    'idempotent'  => true,
+                ],
+                'mcp'         => [
+                    'public' => true,
+                    'type'   => 'tool',
+                ],
+            ],
+        ]);
+    }
+
     public function getTermTranslations(array $input) {
         if (!Multilingual::isEnabled()) {
             return new WP_Error('multilingual_not_active', 'No multilingual plugin (WPML or Polylang) is active on this site.');
@@ -702,6 +760,122 @@ class Translations implements AbilityGroup {
         return $this->termTranslationResult($newId, $taxonomy, $language, true);
     }
 
+    public function linkTermTranslations(array $input) {
+        if (!Multilingual::isEnabled()) {
+            return new WP_Error('multilingual_not_active', 'No multilingual plugin (WPML or Polylang) is active on this site.');
+        }
+
+        $taxonomyObject = Taxonomies::resolve((string)(    $input['taxonomy'] ?? ''    ));
+
+        if (is_wp_error($taxonomyObject)) {
+            return $taxonomyObject;
+        }
+
+        if (!current_user_can($taxonomyObject->cap->edit_terms)) {
+            return new WP_Error('cannot_update', 'You are not allowed to edit terms in this taxonomy.');
+        }
+
+        $taxonomy      = $taxonomyObject->name;
+        $sourceId      = (int)(    $input['term_id'] ?? 0    );
+        $translationId = (int)(    $input['translation_id'] ?? 0    );
+        $source        = self::rawTerm($sourceId, $taxonomy);
+        $translation   = self::rawTerm($translationId, $taxonomy);
+
+        if (!$source) {
+            return new WP_Error('term_not_found', "Term {$sourceId} was not found in taxonomy '{$taxonomy}'.");
+        }
+
+        if (!$translation) {
+            return new WP_Error('term_not_found', "Term {$translationId} was not found in taxonomy '{$taxonomy}'.");
+        }
+
+        if ($sourceId === $translationId) {
+            return new WP_Error('invalid_parameter', 'term_id and translation_id must be different terms.');
+        }
+
+        $sourceLanguage = self::termLanguage($sourceId, $taxonomy);
+        $language       = (string)(    $input['language'] ?? self::termLanguage($translationId, $taxonomy)    );
+
+        if ($language === '') {
+            return new WP_Error('invalid_parameter', "Term {$translationId} has no language yet; pass language explicitly.");
+        }
+
+        if (!array_key_exists($language, Multilingual::getAllActiveLanguages())) {
+            return new WP_Error('invalid_language', "Language '{$language}' is not active on this site.");
+        }
+
+        if ($sourceLanguage === '') {
+            return new WP_Error('invalid_parameter', "Term {$sourceId} has no language assigned; fix it first (link it to another term with language set).");
+        }
+
+        if ($language === $sourceLanguage) {
+            return new WP_Error('same_language', "Term {$sourceId} is already in language '{$language}'; a group cannot hold two terms in one language.");
+        }
+
+        $existingId = self::findTranslatedTermId($sourceId, $taxonomy, $language);
+
+        if ($existingId && $existingId !== $sourceId && $existingId !== $translationId) {
+            return new WP_Error(
+                'translation_exists',
+                "Term {$sourceId} already has a '{$language}' translation (term {$existingId}). Delete or relink that one first."
+            );
+        }
+
+        if (Multilingual::isPolylang()) {
+            Polylang::setTermLanguage($translationId, $language);
+            Polylang::linkTermTranslations($sourceId, $translationId, $language);
+        } else {
+            $sourceTtid = self::termTaxonomyId($sourceId, $taxonomy);
+            $trid       = (int)apply_filters('wpml_element_trid', null, $sourceTtid, 'tax_'.$taxonomy);
+
+            // A source with a language but no translation group yet gets one
+            // by re-registering its own language details with trid=false.
+            if (!$trid) {
+                do_action('wpml_set_element_language_details', [
+                    'element_id'           => $sourceTtid,
+                    'element_type'         => 'tax_'.$taxonomy,
+                    'trid'                 => false,
+                    'language_code'        => $sourceLanguage,
+                    'source_language_code' => null,
+                ]);
+
+                $trid = (int)apply_filters('wpml_element_trid', null, $sourceTtid, 'tax_'.$taxonomy);
+            }
+
+            if (!$trid) {
+                return new WP_Error('link_failed', "Could not resolve a WPML translation group for term {$sourceId}.");
+            }
+
+            do_action('wpml_set_element_language_details', [
+                'element_id'           => (int)$translation->term_taxonomy_id, // phpcs:ignore Zend.NamingConventions.ValidVariableName
+                'element_type'         => 'tax_'.$taxonomy,
+                'trid'                 => $trid,
+                'language_code'        => $language,
+                'source_language_code' => $sourceLanguage,
+            ]);
+        }
+
+        clean_term_cache([$sourceId, $translationId], $taxonomy);
+
+        if (function_exists('icl_cache_clear')) {
+            icl_cache_clear();
+        }
+
+        $linkedId = self::findTranslatedTermId($sourceId, $taxonomy, $language);
+
+        if ($linkedId !== $translationId) {
+            return new WP_Error('link_failed', "Term {$translationId} was not linked as the '{$language}' translation of term {$sourceId}.");
+        }
+
+        $result = $this->getTermTranslations(['term_id' => $sourceId, 'taxonomy' => $taxonomy]);
+
+        if (is_wp_error($result)) {
+            return $result;
+        }
+
+        return ['translation_id' => $translationId, 'language' => $language] + $result;
+    }
+
     /**
      * WPML's term APIs disagree about what an "element id" is, and getting it
      * wrong fails silently — a lookup returns nothing, the caller concludes no
@@ -776,7 +950,7 @@ class Translations implements AbilityGroup {
         ));
     }
 
-    private static function termLanguage(int $termId, string $taxonomy): string {
+    public static function termLanguage(int $termId, string $taxonomy): string {
         if (Multilingual::isPolylang()) {
             return Polylang::getTermLanguage($termId);
         }

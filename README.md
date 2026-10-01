@@ -6,6 +6,14 @@ WPML-only), Gravity Forms
 entries) to an MCP client such as Claude, scoped to one WordPress user, a
 chosen set of post types, and whichever integrations you enable.
 
+## Taxonomy abilities
+
+`list-taxonomies`, `list-terms`, `create-term`, `update-term` (name, slug,
+description, parent) and `delete-term` (optionally with `reassign_to`, which
+moves every object of the deleted term onto another term first). On a
+multilingual site each ability operates on exactly the language version whose
+ID you pass; deleting a term removes only that language version.
+
 ## Translation abilities
 
 With the **WPML** integration enabled:
@@ -15,6 +23,10 @@ With the **WPML** integration enabled:
   translations (categories, and custom taxonomies like `destination`). Parent
   terms are resolved to their translated counterpart so hierarchy is preserved,
   and re-running updates the existing translation rather than duplicating it.
+- `link-term-translations` — attaches an already existing term to another
+  term's translation group under a given language, without creating anything.
+  Use it to merge two terms that were created separately into one group, or
+  to correct a term stored under the wrong language.
 - `list-terms` with `with_translations: true` — every term in a taxonomy plus
   its per-language translation status, to find what still needs translating
 - `translate-menu` — navigation menu translation
