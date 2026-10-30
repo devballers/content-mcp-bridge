@@ -52,6 +52,33 @@ database id — `translate-string` identifies them by their original text.
 `translate-menu` stays WPML-only: Polylang handles menus per language through
 theme menu locations, so there is nothing to translate post-by-post.
 
+## Site health & monitoring
+
+`get-site-health` (always registered, read-only) returns a health report:
+WordPress, PHP and database versions, installed plugins with available
+updates, and checks for settings that are often wrong or forgotten at launch:
+
+- search engines discouraged, `WP_DEBUG` on or displaying errors, file editor enabled
+- placeholder admin email, published "Hello world!" / "Sample Page", default timezone
+- overdue WP-Cron events, list of administrators
+- Gravity Forms: forms without active notifications, notifications to
+  placeholder addresses or from an address outside the site's domain, no spam
+  protection, missing license key
+- ACF field groups defined in code but not yet synced
+- WP Rocket caching/license, Rank Math sitemap module, Imagify API key
+
+Each check has a status of `ok`, `warning`, `critical` or `unknown`.
+
+The same report is available to an external monitoring dashboard at
+`GET /wp-json/content-mcp-bridge/v1/health`, authenticated with an
+`X-Monitor-Key` header. Set the key (32+ letters, digits or dashes) as
+`CONTENT_MCP_BRIDGE_MONITOR_KEY` in `.env`, the environment, or as a
+`wp-config.php` constant. The route doesn't exist until a key is set.
+
+The monitor key is deliberately separate from `CONTENT_MCP_BRIDGE_KEY`: it can
+only read the health report, so a dashboard holding keys for many sites can't
+edit any of them.
+
 ## Requirements
 
 - WordPress 6.5+ (for the `Requires Plugins` dependency check)

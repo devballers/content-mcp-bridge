@@ -5,6 +5,7 @@ use ContentMcpBridge\Abilities\AbilityGroup;
 use ContentMcpBridge\Abilities\Diagnostics;
 use ContentMcpBridge\Abilities\Elementor;
 use ContentMcpBridge\Abilities\GravityForms;
+use ContentMcpBridge\Abilities\Health;
 use ContentMcpBridge\Abilities\Media;
 use ContentMcpBridge\Abilities\Menus;
 use ContentMcpBridge\Abilities\PolylangStrings;
@@ -38,6 +39,7 @@ class AbilityRegistrar {
         $this->register(new Taxonomies(), $readOnly);
         $this->register(new Media(), $readOnly);
         $this->register(new Diagnostics(), $readOnly);
+        $this->register(new Health(), $readOnly);
 
         if (!empty($enabled['acf_fields'])) {
             $this->register(new PostFields(), $readOnly);
