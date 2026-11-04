@@ -71,20 +71,43 @@ Each check has a status of `ok`, `warning`, `critical` or `unknown`.
 
 The same report is available to an external monitoring dashboard at
 `GET /wp-json/content-mcp-bridge/v1/health`, authenticated with an
-`X-Monitor-Key` header. Set the key (32+ letters, digits or dashes) as
-`CONTENT_MCP_BRIDGE_MONITOR_KEY` in `.env`, the environment, or as a
-`wp-config.php` constant. The route doesn't exist until a key is set.
+`X-Monitor-Key` header. The site generates and stores its own key on first
+use; to use your own instead, set `CONTENT_MCP_BRIDGE_MONITOR_KEY` (32+
+letters, digits or dashes) in `.env`, the environment, or as a
+`wp-config.php` constant (an invalid value is ignored, with a warning on the
+settings page). Settings → Content MCP Bridge → Monitoring shows the key in
+use.
 
 The monitor key is deliberately separate from `CONTENT_MCP_BRIDGE_KEY`: it can
 only read the health report, so a dashboard holding keys for many sites can't
 edit any of them.
 
+Monitoring doesn't need MCP Adapter, so the plugin can be installed on any
+site just for the dashboard. The MCP abilities and the settings page only load
+when MCP Adapter is active.
+
+### Registering with the dashboard automatically
+
+Set both of these (environment or `wp-config.php` constants):
+
+- `CONTENT_MCP_BRIDGE_DASHBOARD_URL`: the dashboard's base URL
+- `CONTENT_MCP_BRIDGE_ENROLL_TOKEN`: the shared enroll token configured on the dashboard
+
+The site then posts its URL, name and monitor key to `{dashboard}/api/enroll`
+once a day through WP-Cron, and again right away when the monitor key
+changes. Only sites whose `wp_get_environment_type()` is `production` enroll.
+WordPress treats a site without `WP_ENVIRONMENT_TYPE` as production, so set
+it on local and staging copies (or keep the enroll token out of their
+environment). The dashboard verifies the key by calling the health route back
+before storing it, and new sites wait for approval there. The settings page
+shows the last attempt.
+
 ## Requirements
 
-- WordPress 6.5+ (for the `Requires Plugins` dependency check)
+- WordPress 6.5+
 - PHP 8.0+
-- The **[MCP Adapter](https://github.com/wordpress/mcp-adapter)** plugin, installed and active.
-  This plugin doesn't declare it as a Composer dependency (see
+- For the MCP abilities: the **[MCP Adapter](https://github.com/wordpress/mcp-adapter)**
+  plugin, installed and active (monitoring works without it). This plugin doesn't declare it as a Composer dependency (see
   [Installing MCP Adapter](#installing-mcp-adapter) below for why) — add it to
   your own project's `composer.json` `require`, and activate it separately in
   wp-admin.

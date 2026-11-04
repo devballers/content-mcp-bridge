@@ -7,6 +7,5 @@ class Plugin {
         new Role();
         new AbilityRegistrar();
         new Server();
-        new Monitor();
     }
 }
