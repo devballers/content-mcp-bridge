@@ -112,12 +112,17 @@ class Report {
         $plugins = [];
 
         foreach (get_plugins() as $file => $data) {
+            $offered = isset($pending[$file]->new_version) ? (string)$pending[$file]->new_version : '';
+
             $plugins[] = [
                 'file'    => $file,
                 'name'    => $data['Name'],
                 'version' => $data['Version'],
                 'active'  => is_plugin_active($file),
-                'update'  => isset($pending[$file]->new_version) ? (string)$pending[$file]->new_version : null,
+                // The transient is only refreshed by WordPress's own update
+                // check, so a plugin updated since (e.g. through Composer)
+                // can still be listed with the version it now has.
+                'update'  => $offered !== '' && version_compare($offered, $data['Version'], '>') ? $offered : null,
             ];
         }
 
