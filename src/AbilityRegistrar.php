@@ -4,6 +4,7 @@ namespace ContentMcpBridge;
 use ContentMcpBridge\Abilities\AbilityGroup;
 use ContentMcpBridge\Abilities\Diagnostics;
 use ContentMcpBridge\Abilities\Elementor;
+use ContentMcpBridge\Abilities\Files;
 use ContentMcpBridge\Abilities\GravityForms;
 use ContentMcpBridge\Abilities\Health;
 use ContentMcpBridge\Abilities\Media;
@@ -40,6 +41,10 @@ class AbilityRegistrar {
         $this->register(new Media(), $readOnly);
         $this->register(new Diagnostics(), $readOnly);
         $this->register(new Health(), $readOnly);
+
+        if (Folders::isConfigured()) {
+            $this->register(new Files(), $readOnly);
+        }
 
         if (!empty($enabled['acf_fields'])) {
             $this->register(new PostFields(), $readOnly);

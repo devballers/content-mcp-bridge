@@ -102,6 +102,48 @@ environment). The dashboard verifies the key by calling the health route back
 before storing it, and new sites wait for approval there. The settings page
 shows the last attempt.
 
+## Debug folders
+
+To let the MCP client look at files on the server while debugging (a log
+directory, a theme's source), list the folders in `CONTENT_MCP_BRIDGE_FOLDERS`.
+Nothing on disk is readable until you do, and the abilities below aren't
+registered at all.
+
+```php
+// wp-config.php
+define('CONTENT_MCP_BRIDGE_FOLDERS', [
+    'logs'  => '/var/log/my-site',
+    'theme' => WP_CONTENT_DIR.'/themes/my-theme',
+]);
+```
+
+```
+# .env or the environment: comma-separated, name=path
+CONTENT_MCP_BRIDGE_FOLDERS=logs=/var/log/my-site,theme=wp-content/themes/my-theme
+```
+
+A path without a name is named after its last segment, and a relative path is
+resolved against `ABSPATH`. Settings → Content MCP Bridge → Debug Folders shows
+what is in effect, including entries that were ignored and why.
+
+- `list-files` — the configured folders, or the contents of one directory
+- `read-file` — a text file by line range, or its last N lines with `tail`
+  (up to 2000 lines / 256 KB per call)
+- `search-files` — case-insensitive text search across a folder, optionally
+  limited to a subdirectory, one file or one extension
+
+Access is read-only and can't leave the folder: `../` and symlinks pointing
+outside it are refused. Credentials files are withheld even inside an allowed
+folder (`.env*`, `wp-config*.php`, `.htpasswd`, `auth.json`, `.npmrc`,
+`.netrc`, SSH keys, `*.pem`/`*.key`/`*.p12`/`*.pfx`, and the `.git`, `.ssh`,
+`.aws`, `.gnupg` directories). Everything else in a folder is readable by
+anyone who has the server URL, so point this at specific directories rather
+than a project root, and keep database dumps and backups out of them.
+
+The list lives in config rather than on the settings page deliberately:
+changing what the server URL can read on disk should take access to the
+server itself, not just a wp-admin login.
+
 ## Requirements
 
 - WordPress 6.5+

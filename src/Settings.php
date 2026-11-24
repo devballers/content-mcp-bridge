@@ -163,6 +163,8 @@ class Settings {
 
             <?php $this->renderMonitorSection(); ?>
 
+            <?php $this->renderFoldersSection(); ?>
+
             <form method="post" action="options.php">
                 <?php settings_fields('content_mcp_bridge'); ?>
                 <table class="form-table" role="presentation">
@@ -357,6 +359,40 @@ class Settings {
                             itself with the monitoring dashboard.
                         </p>
                     <?php } ?>
+                </td>
+            </tr>
+        </table>
+        <?php
+    }
+
+    private function renderFoldersSection(): void {
+        $folders  = Folders::all();
+        $rejected = Folders::rejected();
+        ?>
+        <h2>Debug Folders</h2>
+        <table class="form-table" role="presentation">
+            <tr>
+                <th scope="row">Readable Folders</th>
+                <td>
+                    <?php if ($folders) { ?>
+                        <?php foreach ($folders as $name => $path) { ?>
+                            <p><code><?= esc_html($name); ?></code> → <code><?= esc_html($path); ?></code></p>
+                        <?php } ?>
+                    <?php } else { ?>
+                        <p>None. The MCP client can't read any file on the server.</p>
+                    <?php } ?>
+                    <?php foreach ($rejected as $entry => $reason) { ?>
+                        <p><strong>Ignored:</strong> <code><?= esc_html($entry); ?></code> (<?= esc_html($reason); ?>)</p>
+                    <?php } ?>
+                    <p class="description">
+                        Folders the MCP client can list, read and search (never write) for debugging,
+                        such as a log directory or a theme. Set them in
+                        <code><?= esc_html(Folders::CONFIG); ?></code> in <code>wp-config.php</code> or the
+                        environment, e.g. <code>logs=/var/log/site,theme=wp-content/themes/my-theme</code>.
+                        They can't be changed from this page on purpose: anyone with the server URL can
+                        read everything in them. Credentials files (<code>.env</code>,
+                        <code>wp-config.php</code>, keys) are always withheld.
+                    </p>
                 </td>
             </tr>
         </table>
