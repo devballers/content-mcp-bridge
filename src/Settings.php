@@ -15,6 +15,7 @@ class Settings {
         'acf_site_settings'       => 'ACF site settings options page',
         'gravity_forms'           => 'Gravity Forms (forms & entries)',
         'elementor'               => 'Elementor (page text content)',
+        'woocommerce_subscriptions' => 'WooCommerce Subscriptions (read-only subscriptions & orders)',
     ];
 
     public function __construct() {
@@ -86,6 +87,7 @@ class Settings {
             'acf_site_settings'       => function_exists('acf_add_options_page'),
             'gravity_forms'           => class_exists('GFAPI'),
             'elementor'               => defined('ELEMENTOR_VERSION'),
+            'woocommerce_subscriptions' => function_exists('wcs_get_subscriptions') && function_exists('wc_get_orders'),
             default                   => false,
         };
     }

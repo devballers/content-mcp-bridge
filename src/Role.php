@@ -87,6 +87,13 @@ class Role {
             $caps[] = 'wpml_manage_string_translation';
         }
 
+        // Read-only: enough to see every customer's subscriptions and
+        // orders, not to edit them.
+        if (!empty($settings['integrations']['woocommerce_subscriptions'])) {
+            $caps[] = 'read_private_shop_subscriptions';
+            $caps[] = 'read_private_shop_orders';
+        }
+
         $caps = array_merge($caps, self::thirdPartyCapabilities());
 
         return array_values(array_unique(array_filter($caps)));

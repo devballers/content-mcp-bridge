@@ -15,6 +15,7 @@ use ContentMcpBridge\Abilities\Posts;
 use ContentMcpBridge\Abilities\Seo;
 use ContentMcpBridge\Abilities\SiteSettings;
 use ContentMcpBridge\Abilities\Strings;
+use ContentMcpBridge\Abilities\Subscriptions;
 use ContentMcpBridge\Abilities\Taxonomies;
 use ContentMcpBridge\Abilities\Translations;
 
@@ -80,6 +81,11 @@ class AbilityRegistrar {
 
         if (!empty($enabled['elementor'])) {
             $this->register(new Elementor(), $readOnly);
+        }
+
+        // The setting can outlive the plugin it was enabled for.
+        if (!empty($enabled['woocommerce_subscriptions']) && Settings::isIntegrationDetected('woocommerce_subscriptions')) {
+            $this->register(new Subscriptions(), $readOnly);
         }
     }
 

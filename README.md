@@ -144,6 +144,26 @@ The list lives in config rather than on the settings page deliberately:
 changing what the server URL can read on disk should take access to the
 server itself, not just a wp-admin login.
 
+## WooCommerce Subscriptions
+
+With the **WooCommerce Subscriptions** integration enabled, the MCP client can
+read subscriptions. There are no write abilities: changing a subscription's
+status, dates or payment method stays in wp-admin.
+
+- `list-subscriptions` — filter by status, customer, billing email, creation
+  date or manual renewal, or pass `order_id` to get the subscriptions an order
+  belongs to
+- `get-subscription` — one subscription in full: schedule and dates, line
+  items, payment method with its stored references (Stripe customer and source
+  IDs, saved payment tokens), every related order, and optionally its custom
+  fields
+- `find-orders-without-subscription` — scans the orders in a date range for
+  ones that contain a subscription product but aren't linked to a subscription
+
+Enabling it grants the AI Content Editor role `read_private_shop_subscriptions`
+and `read_private_shop_orders`, so the server URL can then read every
+customer's subscriptions and orders, including names and email addresses.
+
 ## Requirements
 
 - WordPress 6.5+
@@ -289,7 +309,7 @@ repository is faster than round-tripping through git:
      accounts with the AI Content Editor role are listed).
    - Choose which post types can be listed/read/edited over MCP, whether
      read-only mode should disable all write abilities, and which detected
-     integrations (WPML, Rank Math, ACF, Gravity Forms) to expose.
+     integrations (WPML, Rank Math, ACF, Gravity Forms, WooCommerce Subscriptions) to expose.
    - Once a key and user are both set, the page shows the live **Server
      URL** — paste that into Claude's "Remote MCP server URL" field.
 
